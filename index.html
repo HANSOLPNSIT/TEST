@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -77,7 +78,7 @@
       <div class="card">
         <div class="row">
           <div>
-            <label>대분류 (분류비율!A)</label>
+            <label>대분류 (분류비율!A2:A12)</label>
             <select id="ddlA"></select>
           </div>
           <div>
@@ -98,7 +99,7 @@
         </div>
         <div class="row">
           <div>
-            <label>확인 값 (선택)</label>
+            <label>확인 값</label>
             <input id="xval" type="number" placeholder="값을 입력하면 z-score·±σ 표기" step="any" />
           </div>
           <div>
@@ -191,23 +192,19 @@
       wbGlobal = wb;
       const sheetInfo = [];
 
-      // 대분류 목록: 분류비율!A
+      // 대분류 목록: 분류비율!A2:A12
       let listA = [];
       if (wb.Sheets['분류비율']){
         const wsCat = wb.Sheets['분류비율'];
-        let r = 2;
-        while (true) {
+        for(let r=2; r<=12; r++){
           const cell = wsCat['A'+r];
-          if (!cell || cell.v==null || String(cell.v).trim()==='') break; // 빈 셀이면 종료
-          listA.push(String(cell.v).trim());
           if(cell && cell.v!=null && String(cell.v).trim()!=='') listA.push(String(cell.v).trim());
-          r++;
         }
-        sheetInfo.push(`대분류 원본: <b>분류비율!A2~데이터끝</b>`);
-       } else {
+        sheetInfo.push(`대분류 원본: <b>분류비율!A2:A12</b>`);
+      } else {
+        sheetInfo.push(`대분류 원본: <b>분류비율 시트 없음</b>`);
       }
-         sheetInfo.push(`대분류 원본: <b>분류비율 시트 없음</b>`);
-      }
+      setOptions(ddlA, listA, listA[0]||null);
 
       // 중분류 고정 리스트
       const listB = ['초급','중급','고급','특급'];
@@ -534,4 +531,5 @@ function draw(){
   </script>
 </body>
 </html>
+
 
