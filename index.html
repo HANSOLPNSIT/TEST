@@ -200,7 +200,7 @@
           const cell = wsCat['A'+r];
           if(cell && cell.v!=null && String(cell.v).trim()!=='') listA.push(String(cell.v).trim());
         }
-        sheetInfo.push(`대분류 원본: <b>분류비율!A2:A12</b>`);
+        sheetInfo.push(`대분류 원본: <b>분류비율</b>`);
       } else {
         sheetInfo.push(`대분류 원본: <b>분류비율 시트 없음</b>`);
       }
@@ -531,6 +531,7 @@ function draw(){
   </script>
 </body>
 </html>
+
 
 
 
