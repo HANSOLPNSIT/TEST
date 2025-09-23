@@ -69,7 +69,7 @@
   <div class="wrap">
     <header>
       <h1>SW기술자 정규분포 시각화 · 표준편차 구간 계산</h1>
-      <span class="sub">엑셀 업로드 후 대·중분류를 선택하면 평균(μ)·표준편차(σ)를 계산합니다. 표시는 <b>소수점 절삭</b>, 값은 <b>(단위: 천원)</b>.</span>
+      <span class="sub">대·중분류를 선택하면 평균(μ)·표준편차(σ)를 계산합니다. 확인값을 입력 후 시뮬레이션하세요. 표시는 <b>소수점 절삭</b>, 값은 <b>(단위: 천원)</b>.</span>
     </header>
 
     <div class="grid">
@@ -215,6 +215,10 @@
       });
       if (initial!=null && uniq.includes(initial)) select.value = initial;
     }
+
+    // === 데이터 범위 상수 (요청: P열 499행부터) ===
+    const ROW_START = 499;
+    const ROW_END   = 729;
 
     // === localStorage: 엑셀 바이너리 임시 저장/복원 ===
     const LS_KEY = 'excel_b64_v1';
@@ -421,7 +425,7 @@
       ctx.setLineDash([6,6]);
       ctx.strokeStyle = 'rgba(255,255,255,.35)';
       ctx.lineWidth = 1.2;
-      for(let k=-mul; k<=mul; k++){
+      for(let k=-3; k<=3; k++){
         const x = mu + k*sigma;
         ctx.beginPath();
         ctx.moveTo(xToPx(x), padT);
@@ -518,16 +522,16 @@
       }
     }
 
-    // 평균/표준편차/최대/최소 계산 (외주용역 P/U/Z, 502~729)
+    // 평균/표준편차/최대/최소 계산 (외주용역 P/U/Z, ROW_START~ROW_END)
     function computeFromFormulas(){
       try{
         if(!wbGlobal) return false;
         const ws = wbGlobal.Sheets['외주용역'];
         if(!ws) return false;
-        const selA = ddlA.value; // A2
-        const selB = ddlB.value; // B2
+        const selA = ddlA.value; // 대분류
+        const selB = ddlB.value; // 중분류
         const vals = [];
-        for(let r=502; r<=729; r++){
+        for(let r=ROW_START; r<=ROW_END; r++){
           const p = ws['P'+r];
           const u = ws['U'+r];
           const z = ws['Z'+r];
@@ -596,3 +600,5 @@
   </script>
 </body>
 </html>
+
+
