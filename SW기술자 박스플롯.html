@@ -26,13 +26,12 @@
     #plot { height: 72vh; }
     .hint { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
     .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; background:#0b2546; color:#b9dcff; border:1px solid #1f3b66; }
-    .footer { font-size: 12px; color: var(--muted); padding: 0 24px 24px; }
   </style>
 </head>
 <body>
   <header>
     <h1>외주용역 박스플롯</h1>
-    <div class="hint">조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열</span> · 데이터 행: <span class="badge">477–750행 (비어있으면 자동 무시)</span></div>
+    <div class="hint">조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열</span> · Y축: <span class="badge">서비스단가=Z열(고정)</span> · 데이터 행: <span class="badge">477–750행 (비어있으면 자동 무시)</span></div>
   </header>
 
   <div class="wrap">
@@ -47,11 +46,11 @@
           <button id="loadDefault">기본 파일(data.xlsx) 읽기</button>
         </div>
       </div>
+
       <label>대분류(분류 · P열) 선택</label>
       <select id="category"></select>
 
-      <label>측정값(숫자 컬럼) 선택 <span class="hint">박스플롯의 Y축 값으로 사용할 숫자 컬럼을 자동 탐지합니다.</span></label>
-      <select id="metric"></select>
+      <!-- 측정값 드롭다운 제거 (Y축 = Z열로 고정) -->
 
       <label>옵션</label>
       <div class="row">
@@ -77,8 +76,6 @@
     </section>
   </div>
 
-  <div class="footer">Made for GitHub Pages · SheetJS + Plotly</div>
-
   <script>
     // --- 설정 상수 ---
     const EXCEL_SHEET_NAME = "외주용역"; // 시트명
@@ -86,13 +83,12 @@
     const ROW_END   = 750; // 포함 (엑셀 1-based)
     const COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
     const COL_U_IDX = 20;  // U열 = 0-based 20 (서비스등급)
-    const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가)  <-- 추가
+    const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가, Y축으로 고정)
 
     const els = {
       file: document.getElementById('file'),
       loadDefault: document.getElementById('loadDefault'),
       category: document.getElementById('category'),
-      metric: document.getElementById('metric'),
       orientation: document.getElementById('orientation'),
       outliers: document.getElementById('outliers'),
       plot: document.getElementById('plot'),
@@ -102,17 +98,11 @@
       headers: [],        // 헤더 행(Array) 또는 자동 생성
       rows: [],           // 2차원 배열 (header:1 기반)
       categoryValues: [], // P열 고유값
-      numericCols: [],    // 숫자형 컬럼 인덱스 목록
     };
 
     // 유틸: 고유값 추출
     function unique(arr) {
       return Array.from(new Set(arr.filter(v => v !== undefined && v !== null && String(v).trim() !== '')));
-    }
-
-    // 유틸: 숫자 여부
-    function isNumeric(val){
-      return typeof val === 'number' && isFinite(val);
     }
 
     // 엑셀 파일 로드 (ArrayBuffer)
@@ -172,15 +162,13 @@
 
       // P열(분류), U열(서비스등급)에서 값 가져오기 (비어있으면 제외)
       const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
-      const uVals = slice.map(r => r[COL_U_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
-
       state.categoryValues = unique(pVals).sort(naturalCompare);
 
-      // 숫자형 컬럼 자동 탐지 (로직은 유지하되, 드롭다운은 Z열만 노출)
-      state.numericCols = detectNumericColumns(slice);
-
       populateCategorySelect();
-      populateMetricSelect();
+
+      // 이벤트
+      els.orientation.onchange = draw;
+      els.outliers.onchange = draw;
 
       draw();
     }
@@ -211,24 +199,6 @@
       return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' });
     }
 
-    function detectNumericColumns(rows){
-      const maxCols = guessMaxCols(rows);
-      const numericIdx = [];
-      for (let c=0;c<maxCols;c++){
-        // 표본 50개까지 검사
-        let nums = 0, vals = 0;
-        for (let r=0;r<rows.length && r<50;r++){
-          const v = rows[r][c];
-          if (v === null || v === undefined || v === '') continue;
-          vals++;
-          if (typeof v === 'number' && isFinite(v)) nums++;
-          else if (typeof v === 'string' && v.trim() !== '' && !isNaN(+v)) { nums++; rows[r][c] = +v; }
-        }
-        if (vals > 0 && nums/Math.max(1,vals) >= 0.8) numericIdx.push(c);
-      }
-      return numericIdx;
-    }
-
     function populateCategorySelect(){
       els.category.innerHTML = '';
       // 전체 보기 옵션
@@ -248,40 +218,20 @@
       els.category.onchange = draw;
     }
 
-    // ▼▼▼ 여기만 교체: 측정값 드롭다운을 Z열(서비스단가)만 노출 ▲▲▲
-    function populateMetricSelect(){
-      els.metric.innerHTML = '';
-      const o = document.createElement('option');
-      o.value = String(COL_Z_IDX);
-      o.textContent = `서비스단가 (열 Z)`;
-      els.metric.appendChild(o);
-      els.metric.value = String(COL_Z_IDX);
-      els.metric.onchange = draw;
-      els.orientation.onchange = draw;
-      els.outliers.onchange = draw;
-    }
-
     function draw(){
       if (!state.rows.length) {
         Plotly.purge(els.plot);
         return;
       }
       const catSel = els.category.value;
-      const metricIdx = +els.metric.value;
       const orient = els.orientation.value; // 'v' or 'h'
       const showOutliers = els.outliers.value !== 'none';
 
-      if (Number.isNaN(metricIdx) || metricIdx < 0){
-        Plotly.purge(els.plot);
-        els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">숫자 컬럼을 선택해 주세요.</div>';
-        return;
-      }
-
-      // 분류(P열) 필터
+      // 분류(P열) 필터 + 필수값 체크(U, Z)
       const filtered = state.rows.filter(r => {
         const p = r[COL_P_IDX];
         const u = r[COL_U_IDX];
-        const y = r[metricIdx];
+        const y = r[COL_Z_IDX];
         if (p === null || p === undefined || String(p).trim() === '') return false;
         if (u === null || u === undefined || String(u).trim() === '') return false;
         if (y === null || y === undefined || y === '' || !isFinite(+y)) return false;
@@ -292,23 +242,28 @@
       const byGrade = new Map();
       for (const r of filtered){
         const grade = String(r[COL_U_IDX]).trim();
-        const val = +r[metricIdx];
+        const val = +r[COL_Z_IDX];
         if (!byGrade.has(grade)) byGrade.set(grade, []);
         byGrade.get(grade).push(val);
       }
 
-      // 빈 그룹 제거
       const grades = Array.from(byGrade.keys()).sort(naturalCompare);
       const traces = grades.map(g => {
-        const arr = byGrade.get(g).filter(isFinite);
+        const arr = byGrade.get(g).filter(Number.isFinite);
         if (!arr.length) return null;
+
+        // 툴팁 포맷(단위 원)
+        const hover = (orient === 'v')
+          ? `${g}<br>%{y:,.0f}원<extra></extra>`
+          : `${g}<br>%{x:,.0f}원<extra></extra>`;
+
         const t = {
           type: 'box',
           name: g,
           boxpoints: showOutliers ? 'suspectedoutliers' : false,
           jitter: 0.3,
           pointpos: 0,
-          hovertemplate: `${g}<br>%{y}<extra></extra>`
+          hovertemplate: hover
         };
         if (orient === 'v') {
           t.y = arr;
@@ -320,22 +275,32 @@
       }).filter(Boolean);
 
       const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
-      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`; // 보통 "서비스단가"
+
+      // 숫자 축 포맷(천단위 콤마 + 원)
+      const numericAxisCommon = {
+        tickformat: ',',
+        ticksuffix: '원',
+        gridcolor: '#1f2937',
+        zerolinecolor: '#1f2937'
+      };
+      const catAxisCommon = {
+        gridcolor: '#1f2937',
+        zerolinecolor: '#1f2937'
+      };
 
       const layout = {
         paper_bgcolor: '#0f172a',
         plot_bgcolor: '#0f172a',
         font: { color: '#e5e7eb' },
         margin: { t: 48, r: 24, b: 72, l: 72 },
-        title: `${titleCat} · Y축: ${metricName}`,
-        xaxis: {
-          title: (els.orientation.value === 'v') ? '서비스등급 (U열)' : metricName,
-          gridcolor: '#1f2937', zerolinecolor: '#1f2937'
-        },
-        yaxis: {
-          title: (els.orientation.value === 'v') ? metricName : '서비스등급 (U열)',
-          gridcolor: '#1f2937', zerolinecolor: '#1f2937'
-        },
+        title: `${titleCat} · Y축: ${metricName} (Z열)`,
+        xaxis: (orient === 'v')
+          ? { title: '서비스등급 (U열)', ...catAxisCommon }
+          : { title: metricName,       ...numericAxisCommon },
+        yaxis: (orient === 'v')
+          ? { title: metricName,       ...numericAxisCommon }
+          : { title: '서비스등급 (U열)', ...catAxisCommon },
         showlegend: false
       };
 
