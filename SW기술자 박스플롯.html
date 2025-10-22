@@ -22,7 +22,7 @@
     .card { background: var(--panel); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; }
     label { display: block; margin: 10px 0 6px; color: var(--muted); font-size: 13px; }
     select, input[type="file"], button { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #374151; background: #0b1222; color: var(--ink); }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 10px; }
     #plot { height: 72vh; }
     .hint { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
     .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; background:#0b2546; color:#b9dcff; border:1px solid #1f3b66; }
@@ -37,7 +37,7 @@
 
   <div class="wrap">
     <section class="card">
-      <div class="row" style="grid-template-columns:1fr;">
+      <div class="row">
         <div>
           <label>기본 파일(data.xlsx) 읽기</label>
           <button id="loadDefault">기본 파일(data.xlsx) 읽기</button>
@@ -46,12 +46,18 @@
           <label>엑셀 파일 불러오기</label>
           <input type="file" id="file" accept=".xlsx,.xls" />
         </div>
+        <div>
+          <label>테스트용 샘플 데이터</label>
+          <button id="loadSample">샘플 데이터 로드 (테스트 케이스)</button>
+          <div class="hint">테스트 케이스: 477~750행 구간에 무작위 분포로 <strong>분류(P)</strong>, <strong>서비스등급(U)</strong>, <strong>서비스단가(Z, 원)</strong>를 생성합니다. 축·툴팁은 천원 단위로 표시.</div>
+        </div>
       </div>
+
       <label>대분류(분류 · P열) 선택</label>
       <select id="category"></select>
 
       <label>옵션</label>
-      <div class="row">
+      <div class="row" style="grid-template-columns: 1fr 1fr;">
         <div>
           <select id="orientation">
             <option value="v" selected>수직 박스(서비스등급 = X축)</option>
@@ -66,7 +72,7 @@
         </div>
       </div>
 
-      <div class="hint">※ 헤더가 없어도 동작하지만, 헤더가 있으면 숫자 컬럼 자동 탐지가 더 정확합니다.<br/>※ 범위: 477–750행만 사용합니다(엑셀 기준 1행부터 시작).</div>
+      <div class="hint">※ 헤더가 없어도 동작하지만, 헤더가 있으면 인식이 더 정확합니다.<br/>※ 범위: 477–750행만 사용합니다(엑셀 기준 1행부터 시작).</div>
     </section>
 
     <section class="card">
@@ -88,8 +94,9 @@
     const els = {
       file: document.getElementById('file'),
       loadDefault: document.getElementById('loadDefault'),
-      category: document.getElementById('category')
-      orientation: document.getElementById('orientation'),
+      loadSample: document.getElementById('loadSample'),
+      category: document.getElementById('category'),
+      orientation: document.getElementById('orientation'), // <-- missing comma fixed
       outliers: document.getElementById('outliers'),
       plot: document.getElementById('plot'),
     };
@@ -97,7 +104,7 @@
     let state = {
       headers: [],        // 헤더 행(Array) 또는 자동 생성
       rows: [],           // 2차원 배열 (header:1 기반)
-      categoryValues: [], // P열 고유값// 숫자형 컬럼 인덱스 목록
+      categoryValues: [], // P열 고유값
     };
 
     // 유틸: 고유값 추출
@@ -105,18 +112,11 @@
       return Array.from(new Set(arr.filter(v => v !== undefined && v !== null && String(v).trim() !== '')));
     }
 
-    // 유틸: 숫자 여부
-    function isNumeric(val){
-      return typeof val === 'number' && isFinite(val);
-    }
-
     // 엑셀 파일 로드 (ArrayBuffer)
     async function loadWorkbookFromArrayBuffer(ab) {
       const wb = XLSX.read(ab, { type: 'array' });
       const sheetName = wb.Sheets[EXCEL_SHEET_NAME] ? EXCEL_SHEET_NAME : wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
-
-      // header:1 => 2차원 배열 [ [c0,c1,...], [..], ... ]
       const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw: true, defval: null });
       return rows;
     }
@@ -143,6 +143,34 @@
       }
     });
 
+    // 샘플 데이터 (테스트 케이스)
+    els.loadSample.addEventListener('click', () => {
+      const totalCols = 30; // A..AD
+      const header = new Array(totalCols).fill(null).map((_, i) => columnLabel(i));
+      header[COL_P_IDX] = '분류';
+      header[COL_U_IDX] = '서비스등급';
+      header[COL_Z_IDX] = '서비스단가(원)';
+
+      const rows = [header];
+      // 1~476행: 비워두기 (실제 시트의 앞부분)
+      for (let i = 1; i < ROW_START; i++) rows.push(new Array(totalCols).fill(null));
+
+      const cats = ['개발', '운영', '컨설팅'];
+      const grades = ['특급', '고급', '중급', '초급'];
+
+      // 477~750행: 무작위 데이터 생성
+      for (let r = ROW_START; r <= ROW_END; r++) {
+        const row = new Array(totalCols).fill(null);
+        row[COL_P_IDX] = cats[Math.floor(Math.random()*cats.length)];
+        row[COL_U_IDX] = grades[Math.floor(Math.random()*grades.length)];
+        // 원 단위 가격 (예: 400,000 ~ 1,600,000)
+        row[COL_Z_IDX] = Math.floor(400000 + Math.random()*1200000);
+        rows.push(row);
+      }
+
+      ingestRows(rows);
+    });
+
     // 행 데이터 주입 및 UI 구성
     function ingestRows(rows){
       if (!rows || !rows.length) {
@@ -167,13 +195,14 @@
 
       // P열(분류), U열(서비스등급)에서 값 가져오기 (비어있으면 제외)
       const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
-      const uVals = slice.map(r => r[COL_U_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
-
       state.categoryValues = unique(pVals).sort(naturalCompare);
+
+      populateCategorySelect();
 
       // 옵션 이벤트 바인딩
       els.orientation.onchange = draw;
       els.outliers.onchange = draw;
+      els.category.onchange = draw;
 
       draw();
     }
@@ -204,7 +233,7 @@
       return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' });
     }
 
-        function populateCategorySelect(){
+    function populateCategorySelect(){
       els.category.innerHTML = '';
       // 전체 보기 옵션
       const optAll = document.createElement('option');
@@ -220,25 +249,22 @@
       });
 
       els.category.value = '__ALL__';
-      els.category.onchange = draw;
     }
 
-        function draw(){
+    function draw(){
       if (!state.rows.length) {
         Plotly.purge(els.plot);
         return;
       }
       const catSel = els.category.value;
-      const metricIdx = COL_Z_IDX;
       const orient = els.orientation.value; // 'v' or 'h'
       const showOutliers = els.outliers.value !== 'none';
 
-      
       // 분류(P열) 필터
       const filtered = state.rows.filter(r => {
         const p = r[COL_P_IDX];
         const u = r[COL_U_IDX];
-        const y = r[metricIdx];
+        const y = r[COL_Z_IDX];
         if (p === null || p === undefined || String(p).trim() === '') return false;
         if (u === null || u === undefined || String(u).trim() === '') return false;
         if (y === null || y === undefined || y === '' || !isFinite(+y)) return false;
@@ -249,7 +275,7 @@
       const byGrade = new Map();
       for (const r of filtered){
         const grade = String(r[COL_U_IDX]).trim();
-        const val = (+r[COL_Z_IDX]) / 1000;
+        const val = (+r[COL_Z_IDX]) / 1000; // 천원 단위로 변환
         if (!byGrade.has(grade)) byGrade.set(grade, []);
         byGrade.get(grade).push(val);
       }
@@ -273,9 +299,6 @@
           t.x = arr;
           t.orientation = 'h';
           t.hovertemplate = `${g}<br>%{x:.0f}천원<extra></extra>`;
-        } else {
-          t.x = arr;
-          t.orientation = 'h';
         }
         return t;
       }).filter(Boolean);
@@ -324,7 +347,7 @@
           ingestRows(rows);
         }
       } catch (e) {
-        // 무시: 기본 파일 없으면 사용자가 업로드하면 됨
+        // 무시: 기본 파일 없으면 사용자가 업로드하거나 샘플 로드
       }
     })();
   </script>
