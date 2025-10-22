@@ -45,3 +45,161 @@
   </div>
 
   <script>
+    // ====== 설정 (필요시 수정) ======
+    const EXCLUDE = new Set(["index.html","404.html",".well-known"]); // 자동 제외
+    const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 캐시
+    // data-branch 속성으로 강제 지정 가능: <html data-branch="gh-pages">
+    // =================================
+
+    const navEl = document.getElementById('nav');
+    const viewer = document.getElementById('viewer');
+    const crumb  = document.getElementById('crumb');
+    const search = document.getElementById('q');
+    const note   = document.getElementById('note');
+
+    // 파일명 → 보기용 제목
+    const pretty = (name) => {
+      const base = name.replace(/\.(html?|HTML?)$/,'');
+      return base
+        .replace(/[-_]+/g,' ')
+        .replace(/\b([a-z])/g, m=>m.toUpperCase()); // 단순 Title Case
+    };
+
+    function detectRepoInfo(){
+      // https://username.github.io/repo/...
+      const host = location.host;           // username.github.io
+      const path = location.pathname;       // /repo/... or /...
+      const user = host.split('.')[0];
+      const segs = path.split('/').filter(Boolean);
+      // user site: username.github.io -> repo is username.github.io
+      // project site: username.github.io/repo -> repo is segs[0]
+      const repo = segs.length ? segs[0] : `${user}.github.io`;
+      return { user, repo };
+    }
+
+    async function fetchContents(user, repo, branchHint){
+      // 브랜치 우선순위: data-branch → gh-pages → main
+      const candidates = [];
+      if (branchHint) candidates.push(branchHint);
+      candidates.push("gh-pages","main");
+      const tried = new Set();
+      for (const ref of candidates){
+        if (tried.has(ref)) continue;
+        tried.add(ref);
+        const url = `https://api.github.com/repos/${user}/${repo}/contents/?ref=${encodeURIComponent(ref)}`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
+        if (res.ok){
+          const data = await res.json();
+          // data = [{name, type, download_url, path, ...}, ...]
+          return { list: data, branch: ref };
+        }
+      }
+      throw new Error("목록을 가져올 수 없습니다. (gh-pages/main 모두 실패)");
+    }
+
+    function cacheGet(key){
+      try{
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj.ts > CACHE_TTL_MS) return null;
+        return obj.data;
+      }catch(_){ return null; }
+    }
+    function cacheSet(key, data){
+      try{ localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); }catch(_){}
+    }
+
+    function renderNav(pages, filter=""){
+      navEl.innerHTML = "";
+      const kw = filter.trim().toLowerCase();
+      const list = pages.filter(p => !kw || p.title.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw));
+      list.forEach(p => {
+        const a = document.createElement('a');
+        a.href = "#"+encodeURIComponent(p.name);
+        a.dataset.path = p.name;
+        a.innerHTML = `<span>${p.title}</span><span class="tag">${p.name}</span>`;
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          openPage(p.name, p.title);
+          setActive(p.name);
+          history.replaceState(null, "", a.href);
+        });
+        navEl.appendChild(a);
+      });
+      // 활성 유지
+      const hashPath = decodeURIComponent(location.hash.slice(1)||"");
+      setActive(hashPath || (list[0]?.name||""));
+    }
+
+    function setActive(path){
+      [...navEl.querySelectorAll('a')].forEach(a => {
+        a.classList.toggle('active', a.dataset.path === path);
+      });
+    }
+    function openPage(path, title){
+      viewer.src = path;
+      crumb.textContent = title ? `열람 중: ${title} (${path})` : path;
+      document.title = `한솔PNS IT부문 구매팀 페이지 · ${title||path}`;
+    }
+
+    async function init(){
+      const branchHint = (document.documentElement.getAttribute('data-branch')||"").trim() || null;
+      const { user, repo } = detectRepoInfo();
+      const cacheKey = `gh_list_${user}_${repo}_${branchHint||'auto'}`;
+      let pages = cacheGet(cacheKey);
+      let branchUsed = null;
+
+      if (!pages){
+        try{
+          const { list, branch } = await fetchContents(user, repo, branchHint);
+          branchUsed = branch;
+          // html/htm 파일만 필터 (루트만; 필요 시 하위 폴더 확장 가능)
+          const files = list
+            .filter(it => it.type === "file")
+            .filter(it => /\.(html?|HTML?)$/.test(it.name))
+            .filter(it => ![...EXCLUDE].some(ex => it.name === ex || it.name.startsWith(ex)));
+          // name/title 구성
+          pages = files
+            .map(it => ({ name: it.name, title: pretty(it.name) }))
+            .sort((a,b) => a.title.localeCompare(b.title,'ko'));
+          cacheSet(cacheKey, pages);
+        }catch(err){
+          note.textContent = "자동 목록 로드 실패: " + err.message + " (캐시/수동 모드로 전환 가능)";
+          pages = []; // 실패 시 비움
+        }
+      }
+
+      if (pages.length === 0){
+        // 안전망: 현재 폴더에서 기본 후보가 있으면 안내
+        note.textContent = (note.textContent? note.textContent+" · " : "") +
+          "루트에 .html 파일을 추가하면 자동으로 목록에 표시됩니다.";
+      }else{
+        note.textContent = `자동 로드됨 (브랜치: ${branchUsed || branchHint || "캐시"}) · 새 파일을 푸시하면 다음 새로고침에 반영됩니다.`;
+      }
+
+      // 네비/검색 렌더
+      renderNav(pages);
+      search.addEventListener('input', () => renderNav(pages, search.value));
+
+      // 초기 열기 (해시 우선)
+      const initial = decodeURIComponent(location.hash.slice(1)||"") || (pages[0]?.name);
+      if (initial){
+        const meta = pages.find(p=>p.name===initial) || pages[0];
+        openPage(meta.name, meta.title);
+        setActive(meta.name);
+        if(!location.hash) history.replaceState(null, "", "#"+encodeURIComponent(meta.name));
+      }
+    }
+
+    window.addEventListener('hashchange', () => {
+      const path = decodeURIComponent(location.hash.slice(1)||"");
+      if (!path) return;
+      openPage(path, pretty(path));
+      setActive(path);
+    });
+
+    init();
+  </script>
+</body>
+</html>
