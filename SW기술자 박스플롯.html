@@ -86,6 +86,7 @@
     const ROW_END   = 750; // 포함 (엑셀 1-based)
     const COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
     const COL_U_IDX = 20;  // U열 = 0-based 20 (서비스등급)
+    const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가)  <-- 추가
 
     const els = {
       file: document.getElementById('file'),
@@ -175,7 +176,7 @@
 
       state.categoryValues = unique(pVals).sort(naturalCompare);
 
-      // 숫자형 컬럼 자동 탐지
+      // 숫자형 컬럼 자동 탐지 (로직은 유지하되, 드롭다운은 Z열만 노출)
       state.numericCols = detectNumericColumns(slice);
 
       populateCategorySelect();
@@ -247,23 +248,14 @@
       els.category.onchange = draw;
     }
 
+    // ▼▼▼ 여기만 교체: 측정값 드롭다운을 Z열(서비스단가)만 노출 ▲▲▲
     function populateMetricSelect(){
       els.metric.innerHTML = '';
-      if (!state.numericCols.length){
-        const o = document.createElement('option');
-        o.value = '-1';
-        o.textContent = '숫자 컬럼을 찾지 못했습니다 (헤더 확인)';
-        els.metric.appendChild(o);
-        return;
-      }
-      state.numericCols.forEach(idx => {
-        const o = document.createElement('option');
-        const name = state.headers[idx] ?? columnLabel(idx);
-        o.value = String(idx);
-        o.textContent = `${name} (열 ${columnLabel(idx)})`;
-        els.metric.appendChild(o);
-      });
-      els.metric.value = String(state.numericCols[0]);
+      const o = document.createElement('option');
+      o.value = String(COL_Z_IDX);
+      o.textContent = `서비스단가 (열 Z)`;
+      els.metric.appendChild(o);
+      els.metric.value = String(COL_Z_IDX);
       els.metric.onchange = draw;
       els.orientation.onchange = draw;
       els.outliers.onchange = draw;
@@ -328,7 +320,7 @@
       }).filter(Boolean);
 
       const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
-      const metricName = state.headers[metricIdx] ?? `열 ${columnLabel(metricIdx)}`;
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
 
       const layout = {
         paper_bgcolor: '#0f172a',
