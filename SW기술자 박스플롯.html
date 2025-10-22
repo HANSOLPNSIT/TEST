@@ -37,21 +37,18 @@
 
   <div class="wrap">
     <section class="card">
-      <div class="row">
+      <div class="row" style="grid-template-columns:1fr;">
         <div>
-          <label>엑셀 파일 불러오기 (기본: 같은 폴더의 <strong>data.xlsx</strong>)</label>
-          <input type="file" id="file" accept=".xlsx,.xls" />
+          <label>기본 파일(data.xlsx) 읽기</label>
+          <button id="loadDefault">기본 파일(data.xlsx) 읽기</button>
         </div>
         <div>
-          <label>&nbsp;</label>
-          <button id="loadDefault">기본 파일(data.xlsx) 읽기</button>
+          <label>엑셀 파일 불러오기</label>
+          <input type="file" id="file" accept=".xlsx,.xls" />
         </div>
       </div>
       <label>대분류(분류 · P열) 선택</label>
       <select id="category"></select>
-
-      <label>측정값(숫자 컬럼) 선택 <span class="hint">박스플롯의 Y축 값으로 사용할 숫자 컬럼을 자동 탐지합니다.</span></label>
-      <select id="metric"></select>
 
       <label>옵션</label>
       <div class="row">
@@ -86,12 +83,12 @@
     const ROW_END   = 750; // 포함 (엑셀 1-based)
     const COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
     const COL_U_IDX = 20;  // U열 = 0-based 20 (서비스등급)
+    const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가)
 
     const els = {
       file: document.getElementById('file'),
       loadDefault: document.getElementById('loadDefault'),
-      category: document.getElementById('category'),
-      metric: document.getElementById('metric'),
+      category: document.getElementById('category')
       orientation: document.getElementById('orientation'),
       outliers: document.getElementById('outliers'),
       plot: document.getElementById('plot'),
@@ -100,8 +97,7 @@
     let state = {
       headers: [],        // 헤더 행(Array) 또는 자동 생성
       rows: [],           // 2차원 배열 (header:1 기반)
-      categoryValues: [], // P열 고유값
-      numericCols: [],    // 숫자형 컬럼 인덱스 목록
+      categoryValues: [], // P열 고유값// 숫자형 컬럼 인덱스 목록
     };
 
     // 유틸: 고유값 추출
@@ -175,11 +171,9 @@
 
       state.categoryValues = unique(pVals).sort(naturalCompare);
 
-      // 숫자형 컬럼 자동 탐지
-      state.numericCols = detectNumericColumns(slice);
-
-      populateCategorySelect();
-      populateMetricSelect();
+      // 옵션 이벤트 바인딩
+      els.orientation.onchange = draw;
+      els.outliers.onchange = draw;
 
       draw();
     }
@@ -210,25 +204,7 @@
       return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' });
     }
 
-    function detectNumericColumns(rows){
-      const maxCols = guessMaxCols(rows);
-      const numericIdx = [];
-      for (let c=0;c<maxCols;c++){
-        // 표본 50개까지 검사
-        let nums = 0, vals = 0;
-        for (let r=0;r<rows.length && r<50;r++){
-          const v = rows[r][c];
-          if (v === null || v === undefined || v === '') continue;
-          vals++;
-          if (typeof v === 'number' && isFinite(v)) nums++;
-          else if (typeof v === 'string' && v.trim() !== '' && !isNaN(+v)) { nums++; rows[r][c] = +v; }
-        }
-        if (vals > 0 && nums/Math.max(1,vals) >= 0.8) numericIdx.push(c);
-      }
-      return numericIdx;
-    }
-
-    function populateCategorySelect(){
+        function populateCategorySelect(){
       els.category.innerHTML = '';
       // 전체 보기 옵션
       const optAll = document.createElement('option');
@@ -247,44 +223,17 @@
       els.category.onchange = draw;
     }
 
-    function populateMetricSelect(){
-      els.metric.innerHTML = '';
-      if (!state.numericCols.length){
-        const o = document.createElement('option');
-        o.value = '-1';
-        o.textContent = '숫자 컬럼을 찾지 못했습니다 (헤더 확인)';
-        els.metric.appendChild(o);
-        return;
-      }
-      state.numericCols.forEach(idx => {
-        const o = document.createElement('option');
-        const name = state.headers[idx] ?? columnLabel(idx);
-        o.value = String(idx);
-        o.textContent = `${name} (열 ${columnLabel(idx)})`;
-        els.metric.appendChild(o);
-      });
-      els.metric.value = String(state.numericCols[0]);
-      els.metric.onchange = draw;
-      els.orientation.onchange = draw;
-      els.outliers.onchange = draw;
-    }
-
-    function draw(){
+        function draw(){
       if (!state.rows.length) {
         Plotly.purge(els.plot);
         return;
       }
       const catSel = els.category.value;
-      const metricIdx = +els.metric.value;
+      const metricIdx = COL_Z_IDX;
       const orient = els.orientation.value; // 'v' or 'h'
       const showOutliers = els.outliers.value !== 'none';
 
-      if (Number.isNaN(metricIdx) || metricIdx < 0){
-        Plotly.purge(els.plot);
-        els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">숫자 컬럼을 선택해 주세요.</div>';
-        return;
-      }
-
+      
       // 분류(P열) 필터
       const filtered = state.rows.filter(r => {
         const p = r[COL_P_IDX];
@@ -300,7 +249,7 @@
       const byGrade = new Map();
       for (const r of filtered){
         const grade = String(r[COL_U_IDX]).trim();
-        const val = +r[metricIdx];
+        const val = (+r[COL_Z_IDX]) / 1000;
         if (!byGrade.has(grade)) byGrade.set(grade, []);
         byGrade.get(grade).push(val);
       }
@@ -315,11 +264,15 @@
           name: g,
           boxpoints: showOutliers ? 'suspectedoutliers' : false,
           jitter: 0.3,
-          pointpos: 0,
-          hovertemplate: `${g}<br>%{y}<extra></extra>`
+          pointpos: 0
         };
         if (orient === 'v') {
           t.y = arr;
+          t.hovertemplate = `${g}<br>%{y:.0f}천원<extra></extra>`;
+        } else {
+          t.x = arr;
+          t.orientation = 'h';
+          t.hovertemplate = `${g}<br>%{x:.0f}천원<extra></extra>`;
         } else {
           t.x = arr;
           t.orientation = 'h';
@@ -328,7 +281,7 @@
       }).filter(Boolean);
 
       const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
-      const metricName = state.headers[metricIdx] ?? `열 ${columnLabel(metricIdx)}`;
+      const metricName = (state.headers[COL_Z_IDX] ?? '서비스단가') + ' (천원)';
 
       const layout = {
         paper_bgcolor: '#0f172a',
@@ -338,11 +291,15 @@
         title: `${titleCat} · Y축: ${metricName}`,
         xaxis: {
           title: (els.orientation.value === 'v') ? '서비스등급 (U열)' : metricName,
-          gridcolor: '#1f2937', zerolinecolor: '#1f2937'
+          gridcolor: '#1f2937', zerolinecolor: '#1f2937',
+          tickformat: (els.orientation.value === 'h') ? ',.0f' : undefined,
+          ticksuffix: (els.orientation.value === 'h') ? '천원' : undefined
         },
         yaxis: {
           title: (els.orientation.value === 'v') ? metricName : '서비스등급 (U열)',
-          gridcolor: '#1f2937', zerolinecolor: '#1f2937'
+          gridcolor: '#1f2937', zerolinecolor: '#1f2937',
+          tickformat: (els.orientation.value === 'v') ? ',.0f' : undefined,
+          ticksuffix: (els.orientation.value === 'v') ? '천원' : undefined
         },
         showlegend: false
       };
