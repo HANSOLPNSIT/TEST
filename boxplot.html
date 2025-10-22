@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Boxplot • P(대분류=S/W기술자유형) · U(등급) → Z(단가)</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;margin:0;background:#0b1020;color:#eef1f7}
+    header{padding:18px 16px;border-bottom:1px solid #26304d;background:linear-gradient(180deg,#121933,#0b1020)}
+    h1{font-size:18px;margin:0}
+    .wrap{padding:16px;max-width:1200px;margin:0 auto}
+    .panel{background:#111832;border:1px solid #26304d;border-radius:14px;padding:14px;margin-bottom:14px}
+    .row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+    label{font-size:13px;color:#c7d2fe;margin-bottom:6px;display:block}
+    select,input,button{background:#0b1020;border:1px solid #33406b;color:#e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px}
+    button{cursor:pointer}
+    button.primary{background:#405cf5;border-color:#5468ff;color:white}
+    #chart{height:600px}
+    .pill{display:inline-block;background:#1b2446;color:#cfe1ff;border:1px solid #2e3a6d;border-radius:999px;padding:4px 10px;margin-right:6px;font-size:12px}
+    .hint{font-size:12px;color:#94a3b8}
+    .grid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}
+    pre{white-space:pre-wrap;background:#0b1020;border:1px dashed #33406b;border-radius:10px;padding:10px;max-height:260px;overflow:auto}
+    a.btn{display:inline-block;text-decoration:none;padding:10px 12px;border-radius:10px;border:1px solid #33406b}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>박스플롯 • P(대분류=S/W기술자유형) · U(등급) → Z(단가)</h1>
+  </header>
+  <div class="wrap">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label>데이터 소스</label>
+          <div class="row">
+            <span class="pill">기본: ./data.xlsx 자동 로드</span>
+            <a id="reload" class="btn" href="#">다시 로드</a>
+          </div>
+          <div class="hint">URL 파라미터로 행/분류를 미리 선택할 수 있어요. 예: <code>?p=응용SW&u=특급&start=477&end=732</code></div>
+        </div>
+        <div>
+          <label>행 범위</label>
+          <div class="row">
+            <input id="startRow" type="number" value="477" min="1" style="width:120px">
+            <input id="endRow" type="number" value="732" min="1" style="width:120px">
+          </div>
+        </div>
+        <div>
+          <label>대분류(P: S/W기술자유형)</label>
+          <select id="pSelect" style="min-width:260px"><option value="__ALL__">전체</option></select>
+        </div>
+        <div>
+          <label>중분류(U: 등급)</label>
+          <select id="uSelect" style="min-width:220px"><option value="__ALL__">전체</option></select>
+        </div>
+        <div>
+          <button id="draw" class="primary">그리기</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel"><div id="chart"></div></div>
+      <div class="panel">
+        <h3 style="margin:6px 0 10px 0;font-size:14px;color:#c7d2fe">선택된 조건의 Z(단가) 값</h3>
+        <dl id="stats" style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:14px"></dl>
+        <pre id="values">(값 로딩 전)</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const HEADER_P = 'S/W기술자유형';
+    const HEADER_U = '등급';
+    const HEADER_Z = '단가';
+    const DEFAULT_FILE = 'data.xlsx'; // 같은 리포지토리 루트에 두세요
+
+    let rawRows = [];
+
+    function q(k, def){ const u=new URL(location.href); return u.searchParams.get(k)??def; }
+    function parseNumber(v){ if(v==null) return NaN; const s=String(v).replace(/[,₩$\s]/g,''); const n=Number(s); return Number.isFinite(n)?n:NaN; }
+    function unique(a){ return Array.from(new Set(a.filter(x=>x!=null && String(x).trim()!==''))); }
+    function idxFromHeader(rows, header){ if(!rows.length) return -1; const h=rows[0].map(x=>String(x||'').trim()); const t=String(header).trim(); let i=h.findIndex(x=>x===t); if(i>-1) return i; const norm=s=>s.replace(/\s+/g,'').toLowerCase(); return h.findIndex(x=>norm(x)===norm(t)); }
+
+    function stats(arr){ if(!arr.length) return null; const v=[...arr].sort((a,b)=>a-b); const n=v.length; const q=p=>{ if(n===1) return v[0]; const pos=(n-1)*p, lo=Math.floor(pos), hi=Math.ceil(pos); return lo===hi?v[lo]:(v[lo]*(hi-pos)+v[hi]*(pos-lo)); }; const sum=v.reduce((s,x)=>s+x,0); const mean=sum/n; const variance=v.reduce((s,x)=>s+(x-mean)**2,0)/(n-1||1); return {count:n,min:v[0],q1:q(0.25),median:q(0.5),q3:q(0.75),max:v[n-1],mean,sd:Math.sqrt(variance)}; }
+    const fmt=n=>Number.isFinite(n)?n.toLocaleString('ko-KR'):'-';
+
+    function buildSelects(rows,pIdx,uIdx){
+      const pSel=document.getElementById('pSelect');
+      const uSel=document.getElementById('uSelect');
+      const pVals=unique(rows.map(r=>r[pIdx])).sort((a,b)=>String(a).localeCompare(String(b),'ko'));
+      pSel.innerHTML='<option value="__ALL__">전체</option>'+pVals.map(v=>`<option value="${String(v)}">${String(v)}</option>`).join('');
+      function refreshU(){
+        const pPick=pSel.value; let subset=rows; if(pPick!=='__ALL__') subset=rows.filter(r=>String(r[pIdx])===String(pPick));
+        const uVals=unique(subset.map(r=>r[uIdx])).sort((a,b)=>String(a).localeCompare(String(b),'ko'));
+        uSel.innerHTML='<option value="__ALL__">전체</option>'+uVals.map(v=>`<option value="${String(v)}">${String(v)}</option>`).join('');
+        // URL의 u 파라미터가 있으면 초기 선택
+        const uParam=q('u',null); if(uParam){ const opt=[...uSel.options].find(o=>o.value===uParam); if(opt) uSel.value=uParam; }
+      }
+      pSel.addEventListener('change', refreshU);
+      // URL의 p 파라미터가 있으면 초기 선택
+      const pParam=q('p',null); if(pParam){ const opt=[...pSel.options].find(o=>o.value===pParam); if(opt) pSel.value=pParam; }
+      refreshU();
+    }
+
+    function drawFrom(rows,pIdx,uIdx,zIdx){
+      const start=parseInt(q('start', document.getElementById('startRow').value),10);
+      const end=parseInt(q('end', document.getElementById('endRow').value),10);
+      const body=rows.slice(1);
+      const startIdx=Math.max(0,start-2); const endIdx=Math.max(startIdx,end-2);
+      const sliced=body.slice(startIdx,endIdx+1);
+      const pPick=document.getElementById('pSelect').value; const uPick=document.getElementById('uSelect').value;
+
+      // 필터된 값 목록
+      const filtered=sliced.filter(r=>{
+        const z=parseNumber(r[zIdx]); if(!Number.isFinite(z)) return false;
+        if(pPick!=='__ALL__' && String(r[pIdx])!==String(pPick)) return false;
+        if(uPick!=='__ALL__' && String(r[uIdx])!==String(uPick)) return false;
+        return true;
+      });
+      const zVals=filtered.map(r=>parseNumber(r[zIdx]));
+
+      // 우측 패널 값/통계 렌더
+      const s=stats(zVals); const el=document.getElementById('stats');
+      if(!s){ el.innerHTML='<em>값 없음</em>'; document.getElementById('values').textContent='(값 없음)'; }
+      else{
+        el.innerHTML=`<span>개수</span><span>${fmt(s.count)}</span>
+                       <span>최솟값</span><span>${fmt(s.min)}</span>
+                       <span>Q1</span><span>${fmt(s.q1)}</span>
+                       <span>중앙값</span><span>${fmt(s.median)}</span>
+                       <span>Q3</span><span>${fmt(s.q3)}</span>
+                       <span>최댓값</span><span>${fmt(s.max)}</span>
+                       <span>평균</span><span>${fmt(s.mean)}</span>
+                       <span>표준편차</span><span>${fmt(s.sd)}</span>`;
+        document.getElementById('values').textContent = zVals.map(v=>fmt(v)).join(', ');
+      }
+
+      // 박스플롯 트레이스 구성
+      let traces=[], layout={};
+      if(pPick==='__ALL__' && uPick==='__ALL__'){
+        const groups=new Map();
+        sliced.forEach(r=>{ const z=parseNumber(r[zIdx]); if(!Number.isFinite(z)) return; const key=`${r[pIdx]} | ${r[uIdx]}`; if(!groups.has(key)) groups.set(key,[]); groups.get(key).push(z);});
+        const keys=[...groups.keys()].sort((a,b)=>a.localeCompare(b,'ko'));
+        keys.forEach(k=>traces.push({y:groups.get(k), name:k, type:'box', boxmean:true, jitter:0.25, pointpos:-1.8}));
+        layout={title:'전체 (대분류|중분류 조합) 단가 분포', xaxis:{title:'대분류 | 중분류', tickangle:-30, automargin:true}, yaxis:{title:'단가'}, paper_bgcolor:'#0b1020', plot_bgcolor:'#0b1020', font:{color:'#e5e7eb'}, showlegend:false, margin:{l:60,r:20,t:50,b:120}};
+      } else if(pPick!=='__ALL__' && uPick==='__ALL__'){
+        const groups=new Map();
+        sliced.forEach(r=>{ if(String(r[pIdx])!==String(pPick)) return; const z=parseNumber(r[zIdx]); if(!Number.isFinite(z)) return; const key=String(r[uIdx]); if(!groups.has(key)) groups.set(key,[]); groups.get(key).push(z);});
+        const keys=[...groups.keys()].sort((a,b)=>a.localeCompare(b,'ko'));
+        keys.forEach(k=>traces.push({y:groups.get(k), name:k, type:'box', boxmean:true, jitter:0.25, pointpos:-1.8}));
+        layout={title:`대분류=${pPick} 의 중분류별 단가 분포`, xaxis:{title:'중분류(등급)', tickangle:-15, automargin:true}, yaxis:{title:'단가'}, paper_bgcolor:'#0b1020', plot_bgcolor:'#0b1020', font:{color:'#e5e7eb'}, showlegend:false, margin:{l:60,r:20,t:50,b:100}};
+      } else if(pPick==='__ALL__' && uPick!=='__ALL__'){
+        const groups=new Map();
+        sliced.forEach(r=>{ if(String(r[uIdx])!==String(uPick)) return; const z=parseNumber(r[zIdx]); if(!Number.isFinite(z)) return; const key=String(r[pIdx]); if(!groups.has(key)) groups.set(key,[]); groups.get(key).push(z);});
+        const keys=[...groups.keys()].sort((a,b)=>a.localeCompare(b,'ko'));
+        keys.forEach(k=>traces.push({y:groups.get(k), name:k, type:'box', boxmean:true, jitter:0.25, pointpos:-1.8}));
+        layout={title:`중분류=${uPick} 의 대분류별 단가 분포`, xaxis:{title:'대분류(S/W기술자유형)', tickangle:-15, automargin:true}, yaxis:{title:'단가'}, paper_bgcolor:'#0b1020', plot_bgcolor:'#0b1020', font:{color:'#e5e7eb'}, showlegend:false, margin:{l:60,r:20,t:50,b:100}};
+      } else {
+        traces=[{y:zVals, name:`${pPick} | ${uPick}`, type:'box', boxmean:true, jitter:0.25, pointpos:-1.8}];
+        layout={title:`${pPick} | ${uPick} 단가 분포`, yaxis:{title:'단가'}, paper_bgcolor:'#0b1020', plot_bgcolor:'#0b1020', font:{color:'#e5e7eb'}, showlegend:false, margin:{l:60,r:20,t:50,b:80}};
+      }
+      Plotly.newPlot('chart', traces, layout, {displaylogo:false, responsive:true});
+    }
+
+    async function load(){
+      // data.xlsx를 같은 폴더에서 가져온다
+      const res = await fetch(q('file', DEFAULT_FILE));
+      if(!res.ok) throw new Error('data.xlsx를 불러올 수 없습니다');
+      const buf = await res.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]]; // 첫 시트 사용
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+      rawRows = rows.filter(r=>r && r.length && r.some(c=>String(c).trim()!==''));
+      const pIdx = idxFromHeader(rawRows, HEADER_P);
+      const uIdx = idxFromHeader(rawRows, HEADER_U);
+      const zIdx = idxFromHeader(rawRows, HEADER_Z);
+      if(pIdx<0||uIdx<0||zIdx<0){ alert('헤더명을 찾지 못했습니다. (S/W기술자유형, 등급, 단가)'); return; }
+      buildSelects(rawRows.slice(1), pIdx, uIdx);
+      // URL start/end 있으면 반영
+      const s=q('start',null), e=q('end',null); if(s) document.getElementById('startRow').value=s; if(e) document.getElementById('endRow').value=e;
+      drawFrom(rawRows, pIdx, uIdx, zIdx);
+      document.getElementById('draw').onclick = ()=> drawFrom(rawRows, pIdx, uIdx, zIdx);
+      document.getElementById('reload').onclick = (ev)=>{ ev.preventDefault(); load().catch(err=>alert(err.message)); };
+    }
+
+    load().catch(err=>{ console.error(err); alert('로딩 실패: '+err.message+'\n(data.xlsx가 같은 폴더에 있는지 확인)'); });
+  </script>
+</body>
+</html>
