@@ -6,7 +6,10 @@
 <title>구매 이력 조회 · 업체 드롭다운 + 전체 검색</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-  :root{--bg:#0f172a;--panel:#111827;--ink:#e5e7eb;--muted:#9ca3af;--brand:#60a5fa;--border:#1f2937;--safe-top-gap:28px;--col0-w:120px;--col1-w:220px;--thead-top:74px}
+  :root{
+    --bg:#0f172a;--panel:#111827;--ink:#e5e7eb;--muted:#9ca3af;--brand:#60a5fa;--border:#1f2937;
+    --safe-top-gap:28px; --col0-w:120px; --col1-w:220px; --thead-top:74px;
+  }
   *{box-sizing:border-box}
   body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;margin:0}
   header{padding:18px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(15,23,42,.92));backdrop-filter:blur(6px);z-index:10;margin-top:var(--safe-top-gap)}
@@ -21,9 +24,14 @@
   button.ghost{background:transparent;border-color:var(--border)}
   main{padding:16px 20px 80px}
   .summary{font-size:13px;color:var(--muted);margin:10px 0 16px}
+
   .table-wrap{overflow-x:auto;border-radius:16px}
   table{width:100%;border-collapse:separate;border-spacing:0;background:#0b1220;border:1px solid var(--border);border-radius:16px;min-width:900px;table-layout:fixed}
-  thead th{position:sticky;top:var(--thead-top);background:#0d1526;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.2px;border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;z-index:3}
+  thead th{
+    position:sticky; top:var(--thead-top);
+    background:#0d1526;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.2px;
+    border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;z-index:3
+  }
   tbody td{padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px}
   tbody tr:hover{background:rgba(96,165,250,0.08)}
   .right{text-align:right}
@@ -52,7 +60,7 @@
       <input id="file" type="file" accept=".xlsx,.xls" />
     </div>
 
-    <!-- ▼ 드롭다운: datalist 복구 + 유효성검사 -->
+    <!-- 구매처: datalist 드롭다운(검색 가능) -->
     <div class="control">
       <label>구매처명 (드롭다운/검색 가능)</label>
       <input id="vendorInput" list="vendorList" placeholder="모든 구매처" />
@@ -61,7 +69,7 @@
     </div>
 
     <div class="control">
-      <label>전체 데이터 검색 (단어 일치)</label>
+      <label>전체 데이터 검색 (부분 일치)</label>
       <input id="globalSearch" type="search" placeholder="프로젝트명, 분류, 비고 등 키워드" />
     </div>
   </div>
@@ -73,18 +81,20 @@
   <div class="table-wrap">
     <table id="table" aria-describedby="countShown countTotal">
       <colgroup><col class="col0"/><col class="col1"/><col/><col/><col/><col/><col/><col/><col/><col/></colgroup>
-      <thead><tr>
-        <th class="sticky-col col-0">PO생성일</th>
-        <th class="sticky-col col-1">프로젝트명</th>
-        <th>분류</th>
-        <th class="right">서비스단가</th>
-        <th>서비스단위</th>
-        <th>서비스 등급내역</th>
-        <th class="right">서비스수량</th>
-        <th>비고</th>
-        <th class="hidden">구매처명</th>
-        <th class="hidden">대분류</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th class="sticky-col col-0">PO생성일</th>
+          <th class="sticky-col col-1">프로젝트명</th>
+          <th>분류</th>
+          <th class="right">서비스단가</th>
+          <th>서비스단위</th>
+          <th>서비스 등급내역</th>
+          <th class="right">서비스수량</th>
+          <th>비고</th>
+          <th class="hidden">구매처명</th>
+          <th class="hidden">대분류</th>
+        </tr>
+      </thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
@@ -96,7 +106,7 @@
 </div>
 
 <script>
-  const DEFAULT_URL = () => `data.xlsx?ts=${Date.now()}`;
+  const DEFAULT_URL = () => `data.xlsx?ts=${Date.now()}`; // GitHub Pages 캐시 무효화
   const PREFERRED_SHEET_NAMES = ["외주용역","Sheet1","data","DATA"];
   const HEADER_MAP = {
     vendor:["구매처명","업체","벤더","Vendor","매입처"],
@@ -106,7 +116,7 @@
     type:["분류","소분류","Type"],
     unitPrice:["서비스단가","단가","UnitPrice","금액"],
     unit:["서비스단위","단위","Unit"],
-    grade:["서비스 등급내역"],
+    grade:["서비스등급내역","서비스 등급 내역","서비스등급 내역","등급","Grade","서비스 등급"],
     qty:["서비스수량","수량","Qty","수량(EA)"],
     note:["비고","메모","Remark","Note"]
   };
@@ -129,7 +139,11 @@
   const parseDate=(v)=>{ if(!v&&v!==0) return null; if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return new Date(d.y,d.m-1,d.d);} const s=String(v).trim().replaceAll(".","-").replaceAll("/","-"); const dt=new Date(s); return isNaN(dt)?null:dt; };
   const fmtDate=(d)=>!d?"":d.toISOString().slice(0,10);
   const norm=(s)=>(s??"").toString().trim();
-  const tokenize=(t)=>String(t??"").toLowerCase().replace(/[^0-9a-zA-Z가-힣._:-]+/g," ").split(/\s+/).filter(Boolean);
+
+  // 부분 일치 검색을 위한 행 전체 텍스트 생성
+  const buildSearchText = (obj) =>
+    [obj.vendor,obj.category,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)]
+      .join(" ").toLowerCase();
 
   function detectHeaders(headerRow){
     const h={}; const row=headerRow.map(h=>norm(h).toLowerCase());
@@ -156,20 +170,18 @@
         qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
         note:norm(r[map.note])
       };
-      const concat=[obj.vendor,obj.category,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ");
-      obj._tokenSet=new Set(tokenize(concat));
+      obj._search = buildSearchText(obj); // ▼ 부분 일치용 텍스트
       return obj;
     }).filter(r=>Object.values(r).some(v=>v!==""));
 
     sortAsc=false;
-    populateVendorOptions();   // datalist 갱신
+    populateVendorOptions();
     applyFiltersAndRender();
     countTotal.textContent=rawRows.length.toLocaleString('ko-KR');
   }
 
   function populateVendorOptions(){
     const vendors=[...new Set(rawRows.map(r=>r.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
-    // 현재 선택값 유지 시도
     const prev=norm(vendorInput.value);
     vendorSet=new Set(vendors);
     vendorList.innerHTML = vendors.map(v=>`<option value="${escapeHtml(v)}"></option>`).join("");
@@ -183,18 +195,22 @@
   function activeFilterChips(){
     const chips=[];
     if(vendorInput.value) chips.push(`<span class="chip">구매처명: ${escapeHtml(vendorInput.value)}</span>`);
-    if(globalSearch.value) chips.push(`<span class="chip">검색(단어 일치): “${escapeHtml(globalSearch.value)}”</span>`);
+    if(globalSearch.value) chips.push(`<span class="chip">검색(부분 일치): “${escapeHtml(globalSearch.value)}”</span>`);
     $("#activeFilters").innerHTML=chips.join("");
   }
 
   function applyFiltersAndRender(){
     const vFilter=norm(vendorInput.value);
-    const qTokens=tokenize(norm(globalSearch.value));
+    const q = norm(globalSearch.value).toLowerCase().trim();
+    const qTokens = q ? q.split(/\s+/) : [];
 
     viewRows = rawRows.filter(r=>{
       const vendorOk = !vFilter || r.vendor===vFilter;
-      let qOk=true;
-      if(qTokens.length){ qOk=qTokens.every(t=>r._tokenSet.has(t)); }
+      let qOk = true;
+      if(qTokens.length){
+        // ▼ “단어의 일부라도 포함되면” 매칭
+        qOk = qTokens.every(t => r._search.includes(t));
+      }
       return vendorOk && qOk;
     });
 
@@ -239,25 +255,25 @@
       <span class="pill">단가 합계: ${fmtKRW(sumUnitPrice)}</span>`;
   }
 
+  function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));}
+
+  // 유효성(목록 밖 수기 입력 방지): 목록에 없으면 비움
   function validateVendor(){
     const v=norm(vendorInput.value);
-    if(!v) return true;               // 공백 허용(모든 구매처)
-    if(vendorSet.has(v)) return true; // 목록 내 값 OK
-    // 유효성 위반 → 입력값 제거 + 안내
+    if(!v) return true;
+    if(vendorSet.has(v)) return true;
     vendorInput.value="";
     vendorInfo.classList.remove('muted');
     vendorInfo.textContent="목록에 없는 값입니다. 드롭다운에서 선택해주세요.";
     return false;
   }
 
-  function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));}
-
   // 이벤트
   $("#file").addEventListener('change', async (e)=>{
     const f=e.target.files?.[0]; if(!f) return;
     const buf=await f.arrayBuffer(); const wb=XLSX.read(buf); loadSheet(wb);
   });
-  vendorInput.addEventListener('input', ()=>{ applyFiltersAndRender(); });     // 입력 즉시 필터
+  vendorInput.addEventListener('input', ()=>{ applyFiltersAndRender(); });
   vendorInput.addEventListener('change', ()=>{ if(validateVendor()) applyFiltersAndRender(); });
   vendorInput.addEventListener('blur',   ()=>{ if(validateVendor()) applyFiltersAndRender(); });
   globalSearch.addEventListener('input', applyFiltersAndRender);
@@ -269,7 +285,6 @@
   window.addEventListener('resize', adjustTheadTop);
   window.addEventListener('load', adjustTheadTop);
 
-  // GitHub 기본 파일 로드
   async function loadDefault(){
     try{
       const res=await fetch(DEFAULT_URL(),{cache:'no-store'});
