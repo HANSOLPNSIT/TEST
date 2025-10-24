@@ -21,16 +21,23 @@
   .controls{display:grid;gap:10px;grid-template-columns:1fr 1.2fr 1fr;}
   .controls label{font-size:12px;color:var(--muted);}
   .control{display:grid;gap:6px;}
-  input[type="search"],input[list],button,input[type="file"]{
+  select,input[type="search"],input[list],button,input[type="file"]{
     background:#0b1220;border:1px solid var(--border);color:var(--ink);
     padding:10px 12px;border-radius:12px;outline:none;font-size:14px;}
+  select{cursor:pointer;}
+  select option{background:#0b1220;color:var(--ink);}
   button.primary{background:var(--brand);border-color:transparent;color:#0b1220;font-weight:700;}
   button.ghost{background:transparent;border:1px solid var(--border);}
   main{padding:16px 20px 80px;}
   table{width:100%;border-collapse:collapse;background:#0b1220;border:1px solid var(--border);
     border-radius:12px;overflow:hidden;}
   th{position:sticky;top:0;background:#0d1526;color:var(--muted);font-weight:600;font-size:12px;
-    border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;}
+    border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;cursor:pointer;
+    user-select:none;}
+  th:hover{background:#111b33;color:var(--brand);}
+  th.sortable::after{content:" ⬍";opacity:0.3;margin-left:4px;}
+  th.sort-asc::after{content:" ⬆";opacity:1;}
+  th.sort-desc::after{content:" ⬇";opacity:1;}
   tbody td{padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px;}
   tbody tr:hover{background:rgba(96,165,250,0.08);}
   .right{text-align:right;}
@@ -49,9 +56,10 @@
       <input id="file" type="file" accept=".xlsx,.xls" />
     </div>
     <div class="control">
-      <label>구매처명 (드롭다운/검색 가능)</label>
-      <input id="vendorInput" list="vendorList" placeholder="모든 구매처" />
-      <datalist id="vendorList"></datalist>
+      <label>구매처명 (드롭다운 선택)</label>
+      <select id="vendorSelect">
+        <option value="">모든 구매처</option>
+      </select>
     </div>
     <div class="control">
       <label>전체 데이터 검색 (부분 일치)</label>
@@ -60,7 +68,6 @@
   </div>
   <div class="summary">
     <span id="countShown">0</span>건 / 총 <span id="countTotal">0</span>건
-    · 정렬: <button class="ghost" id="sortBtn">PO생성일 ⬇</button>
   </div>
   <div id="debugInfo" class="debug-info" style="display:none;"></div>
 </header>
@@ -69,14 +76,15 @@
   <table id="table">
     <thead>
       <tr>
-        <th>PO생성일</th>
-        <th>프로젝트명</th>
-        <th>분류</th>
-        <th class="right">서비스단가</th>
-        <th>서비스단위</th>
-        <th>서비스 등급내역</th>
-        <th class="right">서비스수량</th>
-        <th>비고</th>
+        <th class="sortable" data-key="poDate">PO생성일</th>
+        <th class="sortable" data-key="projectCode">프로젝트코드</th>
+        <th class="sortable" data-key="project">프로젝트명</th>
+        <th class="sortable" data-key="type">분류</th>
+        <th class="sortable right" data-key="unitPrice">서비스단가</th>
+        <th class="sortable" data-key="unit">서비스단위</th>
+        <th class="sortable" data-key="grade">서비스 등급내역</th>
+        <th class="sortable right" data-key="qty">서비스수량</th>
+        <th class="sortable" data-key="note">비고</th>
         <th class="hidden">구매처명</th>
         <th class="hidden">대분류</th>
       </tr>
@@ -97,6 +105,7 @@ const HEADER_MAP = {
   vendor:["구매처명","업체","벤더","Vendor","매입처"],
   category:["대분류","분류(대)","Category","카테고리"],
   poDate:["PO생성일","발주생성일","주문일","PO Date","PO일자"],
+  projectCode:["프로젝트코드","프로젝트 코드","Project Code","사업코드"],
   project:["프로젝트명","사업명","프로젝트","Project"],
   type:["분류","소분류","Type"],
   unitPrice:["서비스단가","단가","UnitPrice","금액"],
@@ -106,16 +115,15 @@ const HEADER_MAP = {
   note:["비고","메모","Remark","Note"]
 };
 
-let rawRows=[],viewRows=[],sortAsc=false;
+let rawRows=[],viewRows=[];
+let sortKey='poDate',sortAsc=false;
 
 const $=(s)=>document.querySelector(s);
 const tbody=$("#tbody");
-const vendorInput=$("#vendorInput");
-const vendorList=$("#vendorList");
+const vendorSelect=$("#vendorSelect");
 const globalSearch=$("#globalSearch");
 const countShown=$("#countShown");
 const countTotal=$("#countTotal");
-const sortBtn=$("#sortBtn");
 const debugInfo=$("#debugInfo");
 
 const fmtKRW=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
@@ -147,7 +155,7 @@ function detectHeaders(headerRow){
       const i=row.indexOf(normalizeForMatch(a));
       if(i!==-1){
         idx=i;
-        if(key==='grade') showDebug(`✅ '${key}' 매칭 성공: "${a}" → 인덱스 ${idx}`);
+        if(key==='grade'||key==='projectCode') showDebug(`✅ '${key}' 매칭 성공: "${a}" → 인덱스 ${idx}`);
         break;
       }
     }
@@ -157,7 +165,7 @@ function detectHeaders(headerRow){
         const i=noSpaceRow.indexOf(normalizeForMatch(a).replace(/\s+/g,''));
         if(i!==-1){
           idx=i;
-          if(key==='grade') showDebug(`✅ '${key}' 매칭 성공 (공백제거): "${a}" → 인덱스 ${idx}`);
+          if(key==='grade'||key==='projectCode') showDebug(`✅ '${key}' 매칭 성공 (공백제거): "${a}" → 인덱스 ${idx}`);
           break;
         }
       }
@@ -167,7 +175,9 @@ function detectHeaders(headerRow){
   
   if(h.grade===-1){
     showDebug("❌ [오류] '서비스 등급내역' 열을 찾지 못했습니다!");
-    showDebug("💡 가능한 별칭들: " + HEADER_MAP.grade.join(", "));
+  }
+  if(h.projectCode===-1){
+    showDebug("⚠️ [경고] '프로젝트코드' 열을 찾지 못했습니다.");
   }
   
   showDebug(`🔍 최종 컬럼 매칭: ${JSON.stringify(h)}`);
@@ -192,6 +202,7 @@ function loadSheet(wb){
       vendor:norm(r[map.vendor]),
       category:norm(r[map.category]),
       poDate:parseDate(r[map.poDate]),
+      projectCode:map.projectCode!==-1?norm(r[map.projectCode]):"",
       project:norm(r[map.project]),
       type:norm(r[map.type]),
       unitPrice:r[map.unitPrice]===""?"":Number(String(r[map.unitPrice]).replace(/[^\d.-]/g,"")),
@@ -201,12 +212,12 @@ function loadSheet(wb){
       note:norm(r[map.note])
     };
     
-    // 첫 3개 행의 grade 값 디버깅
-    if(idx<3 && map.grade!==-1){
-      showDebug(`📝 행 ${idx+1} grade 원본값: "${r[map.grade]}" → 처리후: "${obj.grade}"`);
+    if(idx<3 && (map.grade!==-1||map.projectCode!==-1)){
+      if(map.projectCode!==-1) showDebug(`📝 행 ${idx+1} projectCode: "${r[map.projectCode]}" → "${obj.projectCode}"`);
+      if(map.grade!==-1) showDebug(`📝 행 ${idx+1} grade: "${r[map.grade]}" → "${obj.grade}"`);
     }
     
-    obj._search=[obj.vendor,obj.category,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
+    obj._search=[obj.vendor,obj.category,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
     return obj;
   }).filter(r=>Object.values(r).some(v=>v!==""));
   
@@ -217,19 +228,36 @@ function loadSheet(wb){
 
 function populateVendorOptions(){
   const vendors=[...new Set(rawRows.map(r=>r.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
-  vendorList.innerHTML=vendors.map(v=>`<option value="${v}"></option>`).join("");
+  vendorSelect.innerHTML='<option value="">모든 구매처</option>'+
+    vendors.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
 }
 
 function sortRows(){
   viewRows.sort((a,b)=>{
-    const ad=a.poDate?.getTime()??-Infinity;
-    const bd=b.poDate?.getTime()??-Infinity;
-    return sortAsc?ad-bd:bd-ad;
+    let av=a[sortKey];
+    let bv=b[sortKey];
+    
+    if(sortKey==='poDate'){
+      av=av?.getTime()??-Infinity;
+      bv=bv?.getTime()??-Infinity;
+      return sortAsc?av-bv:bv-av;
+    }
+    
+    if(sortKey==='unitPrice'||sortKey==='qty'){
+      av=av===""?-Infinity:Number(av);
+      bv=bv===""?-Infinity:Number(bv);
+      return sortAsc?av-bv:bv-av;
+    }
+    
+    av=String(av??"");
+    bv=String(bv??"");
+    const cmp=av.localeCompare(bv,'ko');
+    return sortAsc?cmp:-cmp;
   });
 }
 
 function applyFiltersAndRender(){
-  const vFilter=norm(vendorInput.value);
+  const vFilter=norm(vendorSelect.value);
   const q=norm(globalSearch.value).toLowerCase();
   const qTokens=q?q.split(/\s+/):[];
   viewRows=rawRows.filter(r=>{
@@ -247,6 +275,7 @@ function renderTable(){
   const html=viewRows.map(r=>`
   <tr>
     <td>${fmtDate(r.poDate)}</td>
+    <td>${escapeHtml(r.projectCode)}</td>
     <td>${escapeHtml(r.project)}</td>
     <td>${escapeHtml(r.type)}</td>
     <td class="right">${fmtKRW(r.unitPrice)}</td>
@@ -257,7 +286,17 @@ function renderTable(){
     <td class="hidden">${escapeHtml(r.vendor)}</td>
     <td class="hidden">${escapeHtml(r.category)}</td>
   </tr>`).join("");
-  tbody.innerHTML=html||`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
+  tbody.innerHTML=html||`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
+  updateSortIndicators();
+}
+
+function updateSortIndicators(){
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    th.classList.remove('sort-asc','sort-desc');
+    if(th.dataset.key===sortKey){
+      th.classList.add(sortAsc?'sort-asc':'sort-desc');
+    }
+  });
 }
 
 function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));}
@@ -266,10 +305,30 @@ $("#file").addEventListener('change',async(e)=>{
   const f=e.target.files?.[0]; if(!f)return;
   const buf=await f.arrayBuffer(); const wb=XLSX.read(buf); loadSheet(wb);
 });
-vendorInput.addEventListener('input',applyFiltersAndRender);
+
+vendorSelect.addEventListener('change',applyFiltersAndRender);
 globalSearch.addEventListener('input',applyFiltersAndRender);
-sortBtn.addEventListener('click',()=>{sortAsc=!sortAsc;sortBtn.textContent=`PO생성일 ${sortAsc?'⬆':'⬇'}`;sortRows();renderTable();});
-$("#resetBtn").addEventListener('click',()=>{vendorInput.value="";globalSearch.value="";applyFiltersAndRender();});
+
+document.querySelectorAll('th.sortable').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const key=th.dataset.key;
+    if(sortKey===key){
+      sortAsc=!sortAsc;
+    }else{
+      sortKey=key;
+      sortAsc=false;
+    }
+    sortRows();
+    renderTable();
+  });
+});
+
+$("#resetBtn").addEventListener('click',()=>{
+  vendorSelect.value="";
+  globalSearch.value="";
+  applyFiltersAndRender();
+});
+
 $("#reloadBtn").addEventListener('click',()=>{loadDefault();});
 
 async function loadDefault(){
@@ -282,7 +341,7 @@ async function loadDefault(){
   }catch(e){
     console.warn(e);
     showDebug(`⚠️ 기본 파일 로드 실패: ${e.message}`);
-    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
   }
 }
 loadDefault();
