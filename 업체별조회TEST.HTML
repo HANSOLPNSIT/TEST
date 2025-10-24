@@ -50,7 +50,7 @@
   <h1>구매 이력 조회 · 업체 드롭다운 + 전체 검색</h1>
   <div class="controls">
     <div class="control">
-      <label>데이터 파일 (Excel .xlsx) — 기본: data.xlsx (GitHub)</label>
+      <label>데이터 파일 (Excel .xlsx) — 다른 파일 사용시</label>
       <input id="file" type="file" accept=".xlsx,.xls" />
     </div>
     <div class="control">
@@ -96,6 +96,7 @@
 </div>
 
 <script>
+// GitHub에서 data.xlsx 자동 로드 (페이지 열릴 때 자동 실행)
 const DEFAULT_URL = () => `data.xlsx?ts=${Date.now()}`;
 const PREFERRED_SHEET_NAMES = ["외주용역","Sheet1","data","DATA"];
 const HEADER_MAP = {
@@ -237,18 +238,26 @@ function sortRows(){
 }
 
 function applyFiltersAndRender(){
-  const vFilter=norm(vendorSelect.value);
+  const vFilter=vendorSelect.value;
   const q=norm(globalSearch.value).toLowerCase();
   const qTokens=q?q.split(/\s+/):[];
+  
   viewRows=rawRows.filter(r=>{
-    const vendorOk=!vFilter||r.vendor===vFilter;
+    // 구매처 필터: vFilter가 빈 문자열("")이면 모든 데이터 표시
+    const vendorOk=(vFilter==="")||r.vendor===vFilter;
+    
+    // 검색어 필터: 모든 토큰이 포함되어야 함
     let qOk=true;
     if(qTokens.length){qOk=qTokens.every(t=>r._search.includes(t));}
+    
     return vendorOk&&qOk;
   });
+  
   sortRows();
   renderTable();
   countShown.textContent=viewRows.length.toLocaleString('ko-KR');
+  
+  console.log(`✅ 필터 적용: 구매처="${vFilter}" ${vFilter===""?"(전체)":""}, 검색어="${q}", 결과=${viewRows.length}/${rawRows.length}건`);
 }
 
 function renderTable(){
@@ -320,7 +329,7 @@ async function loadDefault(){
     loadSheet(wb);
   }catch(e){
     console.warn(e);
-    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">data.xlsx 파일을 찾을 수 없습니다. 위에서 파일을 업로드해주세요.</td></tr>`;
   }
 }
 loadDefault();
