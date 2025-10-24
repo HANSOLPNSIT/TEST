@@ -36,6 +36,8 @@
   .right{text-align:right;}
   .hidden{display:none;}
   .footer{position:fixed;bottom:12px;right:12px;display:flex;gap:8px;}
+  .debug-info{background:#1a1a2e;border:1px solid var(--border);padding:12px;margin:12px 0;
+    border-radius:8px;font-family:monospace;font-size:12px;color:#fbbf24;}
 </style>
 </head>
 <body>
@@ -60,6 +62,7 @@
     <span id="countShown">0</span>건 / 총 <span id="countTotal">0</span>건
     · 정렬: <button class="ghost" id="sortBtn">PO생성일 ⬇</button>
   </div>
+  <div id="debugInfo" class="debug-info" style="display:none;"></div>
 </header>
 
 <main>
@@ -98,7 +101,7 @@ const HEADER_MAP = {
   type:["분류","소분류","Type"],
   unitPrice:["서비스단가","단가","UnitPrice","금액"],
   unit:["서비스단위","단위","Unit"],
-  grade:["서비스 등급내역","서비스등급내역","서비스등급 내역","등급내역","등급","Grade","서비스 등급 내역"],
+  grade:["서비스 등급내역","서비스등급내역","서비스 등급 내역","서비스등급 내역","등급내역","등급","Grade","grade","서비스등급","서비스 등급"],
   qty:["서비스수량","수량","Qty","수량(EA)"],
   note:["비고","메모","Remark","Note"]
 };
@@ -113,12 +116,19 @@ const globalSearch=$("#globalSearch");
 const countShown=$("#countShown");
 const countTotal=$("#countTotal");
 const sortBtn=$("#sortBtn");
+const debugInfo=$("#debugInfo");
 
 const fmtKRW=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
 const fmtQty=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(Number(n));
 const parseDate=(v)=>{if(!v&&v!==0)return null;if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return new Date(d.y,d.m-1,d.d);}const s=String(v).trim().replaceAll(".","-").replaceAll("/","-");const dt=new Date(s);return isNaN(dt)?null:dt;};
 const fmtDate=(d)=>!d?"":d.toISOString().slice(0,10);
 const norm=(s)=>(s??"").toString().trim();
+
+function showDebug(message){
+  debugInfo.style.display='block';
+  debugInfo.innerHTML+=message+'<br>';
+  console.log(message);
+}
 
 function detectHeaders(headerRow){
   const normalizeForMatch=(s)=>String(s??"").toLowerCase()
@@ -127,32 +137,57 @@ function detectHeaders(headerRow){
     .trim();
   const h={};
   const row=headerRow.map(h=>normalizeForMatch(h));
+  
+  showDebug(`📋 실제 헤더: ${JSON.stringify(headerRow)}`);
+  showDebug(`🔄 정규화된 헤더: ${JSON.stringify(row)}`);
+  
   for(const [key,aliases] of Object.entries(HEADER_MAP)){
     let idx=-1;
     for(const a of aliases){
       const i=row.indexOf(normalizeForMatch(a));
-      if(i!==-1){idx=i;break;}
+      if(i!==-1){
+        idx=i;
+        if(key==='grade') showDebug(`✅ '${key}' 매칭 성공: "${a}" → 인덱스 ${idx}`);
+        break;
+      }
     }
     if(idx===-1){
       const noSpaceRow=row.map(x=>x.replace(/\s+/g,''));
       for(const a of aliases){
         const i=noSpaceRow.indexOf(normalizeForMatch(a).replace(/\s+/g,''));
-        if(i!==-1){idx=i;break;}
+        if(i!==-1){
+          idx=i;
+          if(key==='grade') showDebug(`✅ '${key}' 매칭 성공 (공백제거): "${a}" → 인덱스 ${idx}`);
+          break;
+        }
       }
     }
     h[key]=idx;
   }
-  if(h.grade===-1){console.warn("⚠️ [헤더 경고] '서비스 등급내역' 열을 찾지 못했습니다.", headerRow);}
+  
+  if(h.grade===-1){
+    showDebug("❌ [오류] '서비스 등급내역' 열을 찾지 못했습니다!");
+    showDebug("💡 가능한 별칭들: " + HEADER_MAP.grade.join(", "));
+  }
+  
+  showDebug(`🔍 최종 컬럼 매칭: ${JSON.stringify(h)}`);
   return h;
 }
 
 function loadSheet(wb){
+  debugInfo.innerHTML='';
+  debugInfo.style.display='none';
+  
   const name=wb.SheetNames.find(n=>PREFERRED_SHEET_NAMES.includes(n))||wb.SheetNames[0];
+  showDebug(`📊 로드된 시트: "${name}"`);
+  
   const sheet=wb.Sheets[name];
   const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
   if(!rows.length) return;
+  
   const map=detectHeaders(rows[0]);
-  rawRows=rows.slice(1).map(r=>{
+  
+  rawRows=rows.slice(1).map((r,idx)=>{
     const obj={
       vendor:norm(r[map.vendor]),
       category:norm(r[map.category]),
@@ -161,13 +196,20 @@ function loadSheet(wb){
       type:norm(r[map.type]),
       unitPrice:r[map.unitPrice]===""?"":Number(String(r[map.unitPrice]).replace(/[^\d.-]/g,"")),
       unit:norm(r[map.unit]),
-      grade:norm(r[map.grade]),
+      grade:map.grade!==-1?norm(r[map.grade]):"",
       qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
       note:norm(r[map.note])
     };
+    
+    // 첫 3개 행의 grade 값 디버깅
+    if(idx<3 && map.grade!==-1){
+      showDebug(`📝 행 ${idx+1} grade 원본값: "${r[map.grade]}" → 처리후: "${obj.grade}"`);
+    }
+    
     obj._search=[obj.vendor,obj.category,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
     return obj;
   }).filter(r=>Object.values(r).some(v=>v!==""));
+  
   populateVendorOptions();
   applyFiltersAndRender();
   countTotal.textContent=rawRows.length.toLocaleString('ko-KR');
@@ -239,7 +281,8 @@ async function loadDefault(){
     loadSheet(wb);
   }catch(e){
     console.warn(e);
-    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다.</td></tr>`;
+    showDebug(`⚠️ 기본 파일 로드 실패: ${e.message}`);
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
   }
 }
 loadDefault();
