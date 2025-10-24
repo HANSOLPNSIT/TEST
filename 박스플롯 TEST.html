@@ -1,184 +1,269 @@
-<script>
-  // --- 고정 X축 순서 ---
-  const GRADE_ORDER = ['초급','중급','고급','특급','컨설턴트'];
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>외주용역 박스플롯 · 대분류 드롭다운 / 서비스등급 X축</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;        /* slate-900 */
+      --panel: #111827;     /* gray-900 */
+      --ink: #e5e7eb;       /* gray-200 */
+      --muted: #9ca3af;     /* gray-400 */
+      --brand: #60a5fa;     /* blue-400 */
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+    header { padding: 18px 24px; border-bottom: 1px solid #1f2937; background: linear-gradient(180deg,#0f172a 0%, #0b1222 100%); }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 18px 24px; }
+    .card { background: var(--panel); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; }
+    label { display: block; margin: 10px 0 6px; color: var(--muted); font-size: 13px; }
+    select, input[type="file"], button { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #374151; background: #0b1222; color: var(--ink); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    /* 첫 행 전용: 오른쪽 버튼 폭 고정으로 '찌그러짐' 방지 */
+    .row-fixed { grid-template-columns: 1fr 220px; align-items: end; }
+    #plot { height: 72vh; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; background:#0b2546; color:#b9dcff; border:1px solid #1f3b66; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>외주용역 박스플롯</h1>
+    <div class="hint">조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열</span> · Y축: <span class="badge">서비스단가=Z열(고정)</span> · 데이터 행: <span class="badge">477–750행 (비어있으면 자동 무시)</span></div>
+  </header>
 
-  // --- 설정 상수 ---
-  const EXCEL_SHEET_NAME = "외주용역"; // 시트명
-  const ROW_START = 477; // 포함 (엑셀 1-based)
-  const ROW_END   = 750; // 포함 (엑셀 1-based)
-  const COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
-  const COL_U_IDX = 20;  // U열 = 0-based 20 (서비스등급)
-  const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가, Y축으로 고정)
+  <div class="wrap">
+    <section class="card">
+      <div class="row row-fixed">
+        <div>
+          <label>엑셀 파일 불러오기 (기본: 같은 폴더의 <strong>data.xlsx</strong>)</label>
+          <input type="file" id="file" accept=".xlsx,.xls" />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="loadDefault">기본 파일(data.xlsx) 읽기</button>
+        </div>
+      </div>
 
-  const els = {
-    file: document.getElementById('file'),
-    loadDefault: document.getElementById('loadDefault'),
-    category: document.getElementById('category'),
-    orientation: document.getElementById('orientation'),
-    outliers: document.getElementById('outliers'),
-    plot: document.getElementById('plot'),
-  };
+      <label>대분류(분류 · P열) 선택</label>
+      <select id="category"></select>
 
-  let state = {
-    headers: [],
-    rows: [],
-    categoryValues: [],
-  };
+      <!-- 측정값 드롭다운 제거 (Y축 = Z열로 고정) -->
 
-  function unique(arr) {
-    return Array.from(new Set(arr.filter(v => v !== undefined && v !== null && String(v).trim() !== '')));
-  }
+      <label>옵션</label>
+      <div class="row">
+        <div>
+          <select id="orientation">
+            <option value="v" selected>수직 박스(서비스등급 = X축)</option>
+            <option value="h">수평 박스(서비스등급 = Y축)</option>
+          </select>
+        </div>
+        <div>
+          <select id="outliers">
+            <option value="suspected" selected>이상치 표시</option>
+            <option value="none">이상치 숨김</option>
+          </select>
+        </div>
+      </div>
 
-  async function loadWorkbookFromArrayBuffer(ab) {
-    const wb = XLSX.read(ab, { type: 'array' });
-    const sheetName = wb.Sheets[EXCEL_SHEET_NAME] ? EXCEL_SHEET_NAME : wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    return XLSX.utils.sheet_to_json(ws, { header:1, raw: true, defval: null });
-  }
+      <div class="hint">※ 헤더가 없어도 동작하지만, 헤더가 있으면 숫자 컬럼 자동 탐지가 더 정확합니다.<br/>※ 범위: 477–750행만 사용합니다(엑셀 기준 1행부터 시작).</div>
+    </section>
 
-  els.file.addEventListener('change', async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const ab = await f.arrayBuffer();
-    const rows = await loadWorkbookFromArrayBuffer(ab);
-    ingestRows(rows);
-  });
+    <section class="card">
+      <div id="plot"></div>
+    </section>
+  </div>
 
-  els.loadDefault.addEventListener('click', async () => {
-    try {
-      const res = await fetch('data.xlsx');
-      if (!res.ok) throw new Error('data.xlsx를 찾을 수 없습니다. 같은 폴더에 위치시켜 주세요.');
-      const ab = await res.arrayBuffer();
+  <script>
+    // --- 고정 X축 순서 ---
+    const GRADE_ORDER = ['초급','중급','고급','특급','컨설턴트'];
+
+    // --- 설정 상수 ---
+    const EXCEL_SHEET_NAME = "외주용역"; // 시트명
+    const ROW_START = 477; // 포함 (엑셀 1-based)
+    const ROW_END   = 750; // 포함 (엑셀 1-based)
+    const COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
+    const COL_U_IDX = 20;  // U열 = 0-based 20 (서비스등급)
+    const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가, Y축으로 고정)
+
+    const els = {
+      file: document.getElementById('file'),
+      loadDefault: document.getElementById('loadDefault'),
+      category: document.getElementById('category'),
+      orientation: document.getElementById('orientation'),
+      outliers: document.getElementById('outliers'),
+      plot: document.getElementById('plot'),
+    };
+
+    let state = {
+      headers: [],        // 헤더 행(Array) 또는 자동 생성
+      rows: [],           // 2차원 배열 (header:1 기반)
+      categoryValues: [], // P열 고유값
+    };
+
+    // 유틸: 고유값 추출
+    function unique(arr) {
+      return Array.from(new Set(arr.filter(v => v !== undefined && v !== null && String(v).trim() !== '')));
+    }
+
+    // 엑셀 파일 로드 (ArrayBuffer)
+    async function loadWorkbookFromArrayBuffer(ab) {
+      const wb = XLSX.read(ab, { type: 'array' });
+      const sheetName = wb.Sheets[EXCEL_SHEET_NAME] ? EXCEL_SHEET_NAME : wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+
+      // header:1 => 2차원 배열 [ [c0,c1,...], [..], ... ]
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw: true, defval: null });
+      return rows;
+    }
+
+    // 파일 인풋 핸들러
+    els.file.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const ab = await f.arrayBuffer();
       const rows = await loadWorkbookFromArrayBuffer(ab);
       ingestRows(rows);
-    } catch (err) {
-      alert(err.message || err);
-    }
-  });
-
-  function ingestRows(rows){
-    if (!rows || !rows.length) {
-      alert('시트가 비어있습니다.');
-      return;
-    }
-    const first = rows[0] || [];
-    const headerLike = first.some(v => typeof v === 'string');
-
-    let headerRow = headerLike ? first : [];
-    let data = headerLike ? rows.slice(1) : rows.slice();
-
-    const startIdx = ROW_START - 1 - (headerLike ? 1 : 0);
-    const endIdx   = ROW_END   - 1 - (headerLike ? 1 : 0);
-    const slice = data.filter((_, i) => i >= startIdx && i <= endIdx);
-
-    state.rows = slice;
-    state.headers = headerRow.length ? headerRow : generateFallbackHeaders(rows[0]?.length || guessMaxCols(slice));
-
-    const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
-    state.categoryValues = unique(pVals).sort(naturalCompare);
-
-    populateCategorySelect();
-    els.orientation.onchange = draw;
-    els.outliers.onchange = draw;
-
-    draw();
-  }
-
-  function guessMaxCols(rows){ return Math.max(0, ...rows.map(r => (Array.isArray(r) ? r.length : 0))); }
-
-  function generateFallbackHeaders(n){
-    const labels = [];
-    for (let i=0;i<n;i++) labels.push(columnLabel(i));
-    return labels;
-  }
-
-  function columnLabel(idx){
-    let s = '', n = idx;
-    while (n >= 0) { s = String.fromCharCode((n % 26) + 65) + s; n = Math.floor(n / 26) - 1; }
-    return s;
-  }
-
-  function naturalCompare(a,b){ return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' }); }
-
-  function populateCategorySelect(){
-    els.category.innerHTML = '';
-    const optAll = document.createElement('option');
-    optAll.value = '__ALL__';
-    optAll.textContent = `전체 (${state.categoryValues.length}개 분류)`;
-    els.category.appendChild(optAll);
-
-    state.categoryValues.forEach(v => {
-      const o = document.createElement('option');
-      o.value = String(v);
-      o.textContent = String(v);
-      els.category.appendChild(o);
     });
 
-    els.category.value = '__ALL__';
-    els.category.onchange = draw;
-  }
-
-  // 빈 카테고리용 투명 더미 박스 생성
-  function makeEmptyBox(name, anchorVal, orient){
-    const t = {
-      type: 'box',
-      name,
-      boxpoints: false,
-      hoverinfo: 'skip',
-      line: { color: 'rgba(0,0,0,0)' },
-      fillcolor: 'rgba(0,0,0,0)',
-      marker: { color: 'rgba(0,0,0,0)' },
-      opacity: 0.01
-    };
-    if (orient === 'v') {
-      t.y = [anchorVal];
-    } else {
-      t.x = [anchorVal];
-      t.orientation = 'h';
-    }
-    return t;
-  }
-
-  function draw(){
-    if (!state.rows.length) { Plotly.purge(els.plot); return; }
-    const catSel = els.category.value;
-    const orient = els.orientation.value; // 'v' or 'h'
-    const showOutliers = els.outliers.value !== 'none';
-
-    const filtered = state.rows.filter(r => {
-      const p = r[COL_P_IDX], u = r[COL_U_IDX], y = r[COL_Z_IDX];
-      if (p === null || p === undefined || String(p).trim() === '') return false;
-      if (u === null || u === undefined || String(u).trim() === '') return false;
-      if (y === null || y === undefined || y === '' || !isFinite(+y)) return false;
-      return catSel === '__ALL__' || String(p) === catSel;
+    // 기본 data.xlsx 읽기
+    els.loadDefault.addEventListener('click', async () => {
+      try {
+        const res = await fetch('data.xlsx');
+        if (!res.ok) throw new Error('data.xlsx를 찾을 수 없습니다. 같은 폴더에 위치시켜 주세요.');
+        const ab = await res.arrayBuffer();
+        const rows = await loadWorkbookFromArrayBuffer(ab);
+        ingestRows(rows);
+      } catch (err) {
+        alert(err.message || err);
+      }
     });
 
-    // 전체 값(축 앵커값 계산용)
-    const allVals = filtered.map(r => +r[COL_Z_IDX]).filter(Number.isFinite);
-    if (!allVals.length){
-      Plotly.purge(els.plot);
-      els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">선택한 조건에서 표시할 데이터가 없습니다.</div>';
-      return;
-    }
-    const globalMin = Math.min(...allVals);
+    // 행 데이터 주입 및 UI 구성
+    function ingestRows(rows){
+      if (!rows || !rows.length) {
+        alert('시트가 비어있습니다.');
+        return;
+      }
+      // 헤더 추정: 첫 행에 문자열이 더 많으면 헤더로 간주
+      const first = rows[0] || [];
+      const headerLike = first.some(v => typeof v === 'string');
 
-    // 서비스등급별 그룹화
-    const byGrade = new Map();
-    for (const r of filtered){
-      const grade = String(r[COL_U_IDX]).trim();
-      const val = +r[COL_Z_IDX];
-      if (!byGrade.has(grade)) byGrade.set(grade, []);
-      byGrade.get(grade).push(val);
+      let headerRow = headerLike ? first : [];
+      let data = headerLike ? rows.slice(1) : rows.slice();
+
+      // Excel 1-based 행번호 477~750 (포함) => 배열 0-based로 환산
+      const startIdx = ROW_START - 1 - (headerLike ? 1 : 0);
+      const endIdx = ROW_END - 1 - (headerLike ? 1 : 0);
+
+      const slice = data.filter((_, i) => i >= startIdx && i <= endIdx);
+
+      state.rows = slice;
+      state.headers = headerRow.length ? headerRow : generateFallbackHeaders(rows[0]?.length || guessMaxCols(slice));
+
+      // P열(분류), U열(서비스등급)에서 값 가져오기 (비어있으면 제외)
+      const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+      state.categoryValues = unique(pVals).sort(naturalCompare);
+
+      populateCategorySelect();
+
+      // 이벤트
+      els.orientation.onchange = draw;
+      els.outliers.onchange = draw;
+
+      draw();
     }
 
-    // GRADE_ORDER 기준으로 필수 노출 + 데이터 없으면 더미 박스
-    const traces = [];
-    for (const g of GRADE_ORDER){
-      const arr = (byGrade.get(g) || []).filter(Number.isFinite);
-      if (arr.length){
+    function guessMaxCols(rows){
+      return Math.max(0, ...rows.map(r => (Array.isArray(r) ? r.length : 0)));
+    }
+
+    function generateFallbackHeaders(n){
+      // A,B,C,... 스타일 헤더
+      const labels = [];
+      for (let i=0;i<n;i++) labels.push(columnLabel(i));
+      return labels;
+    }
+
+    function columnLabel(idx){
+      // 0 -> A, 25 -> Z, 26 -> AA
+      let s = '';
+      let n = idx;
+      while (n >= 0) {
+        s = String.fromCharCode((n % 26) + 65) + s;
+        n = Math.floor(n / 26) - 1;
+      }
+      return s;
+    }
+
+    function naturalCompare(a,b){
+      return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' });
+    }
+
+    function populateCategorySelect(){
+      els.category.innerHTML = '';
+      // 전체 보기 옵션
+      const optAll = document.createElement('option');
+      optAll.value = '__ALL__';
+      optAll.textContent = `전체 (${state.categoryValues.length}개 분류)`;
+      els.category.appendChild(optAll);
+
+      state.categoryValues.forEach(v => {
+        const o = document.createElement('option');
+        o.value = String(v);
+        o.textContent = String(v);
+        els.category.appendChild(o);
+      });
+
+      els.category.value = '__ALL__';
+      els.category.onchange = draw;
+    }
+
+    function draw(){
+      if (!state.rows.length) {
+        Plotly.purge(els.plot);
+        return;
+      }
+      const catSel = els.category.value;
+      const orient = els.orientation.value; // 'v' or 'h'
+      const showOutliers = els.outliers.value !== 'none';
+
+      // 분류(P열) 필터 + 필수값 체크(U, Z)
+      const filtered = state.rows.filter(r => {
+        const p = r[COL_P_IDX];
+        const u = r[COL_U_IDX];
+        const y = r[COL_Z_IDX];
+        if (p === null || p === undefined || String(p).trim() === '') return false;
+        if (u === null || u === undefined || String(u).trim() === '') return false;
+        if (y === null || y === undefined || y === '' || !isFinite(+y)) return false;
+        return catSel === '__ALL__' || String(p) === catSel;
+      });
+
+      // 서비스등급(U열)별로 그룹화
+      const byGrade = new Map();
+      for (const r of filtered){
+        const grade = String(r[COL_U_IDX]).trim();
+        const val = +r[COL_Z_IDX];
+        if (!byGrade.has(grade)) byGrade.set(grade, []);
+        byGrade.get(grade).push(val);
+      }
+
+      // X축을 지정된 순서로 고정
+      const grades = GRADE_ORDER.filter(g => byGrade.has(g));
+
+      const traces = grades.map(g => {
+        const arr = (byGrade.get(g) || []).filter(Number.isFinite);
+        if (!arr.length) return null;
+
+        // 툴팁 포맷(단위 원)
         const hover = (orient === 'v')
           ? `${g}<br>%{y:,.0f}원<extra></extra>`
           : `${g}<br>%{x:,.0f}원<extra></extra>`;
+
         const t = {
           type: 'box',
           name: g,
@@ -187,62 +272,83 @@
           pointpos: 0,
           hovertemplate: hover
         };
-        if (orient === 'v') t.y = arr; else { t.x = arr; t.orientation = 'h'; }
-        traces.push(t);
+        if (orient === 'v') {
+          t.y = arr;
+        } else {
+          t.x = arr;
+          t.orientation = 'h';
+        }
+        return t;
+      }).filter(Boolean);
+
+      const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`; // 보통 "서비스단가"
+
+      // 숫자 축 포맷(천단위 콤마 + 원)
+      const numericAxisCommon = {
+        tickformat: ',',
+        ticksuffix: '원',
+        gridcolor: '#1f2937',
+        zerolinecolor: '#1f2937',
+        automargin: true,
+        title: { text: metricName, standoff: 16 } // 제목-눈금 간격 확보
+      };
+      const catAxisCommon = {
+        gridcolor: '#1f2937',
+        zerolinecolor: '#1f2937',
+        automargin: true
+      };
+
+      const layout = {
+        paper_bgcolor: '#0f172a',
+        plot_bgcolor: '#0f172a',
+        font: { color: '#e5e7eb' },
+        margin: { t: 48, r: 24, b: 72, l: 84 },
+        title: `${titleCat} · Y축: ${metricName} (Z열)`,
+        showlegend: false
+      };
+
+      if (orient === 'v') {
+        layout.xaxis = {
+          title: '서비스등급 (U열)',
+          ...catAxisCommon,
+          categoryorder: 'array',
+          categoryarray: GRADE_ORDER
+        };
+        layout.yaxis = numericAxisCommon;
       } else {
-        // 빈 등급: 축에 이름만 고정되도록 투명 더미 박스 추가
-        traces.push(makeEmptyBox(g, globalMin, orient));
+        layout.xaxis = numericAxisCommon;
+        layout.yaxis = {
+          title: '서비스등급 (U열)',
+          ...catAxisCommon,
+          categoryorder: 'array',
+          categoryarray: GRADE_ORDER
+        };
       }
+
+      if (!traces.length){
+        Plotly.purge(els.plot);
+        els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">선택한 조건에서 표시할 데이터가 없습니다.</div>';
+        return;
+      }
+
+      Plotly.react(els.plot, traces, layout, {responsive: true, displaylogo:false});
     }
 
-    const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
-    const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
-
-    const numericAxisCommon = {
-      tickformat: ',',
-      ticksuffix: '원',
-      gridcolor: '#1f2937',
-      zerolinecolor: '#1f2937',
-      automargin: true,
-      title: { text: metricName, standoff: 16 }
-    };
-    const catAxisCommon = {
-      gridcolor: '#1f2937',
-      zerolinecolor: '#1f2937',
-      automargin: true,
-      categoryorder: 'array',
-      categoryarray: GRADE_ORDER
-    };
-
-    const layout = {
-      paper_bgcolor: '#0f172a',
-      plot_bgcolor: '#0f172a',
-      font: { color: '#e5e7eb' },
-      margin: { t: 48, r: 24, b: 72, l: 84 },
-      title: `${titleCat} · Y축: ${metricName} (Z열)`,
-      showlegend: false
-    };
-
-    if (orient === 'v') {
-      layout.xaxis = { title: '서비스등급 (U열)', ...catAxisCommon };
-      layout.yaxis = numericAxisCommon;
-    } else {
-      layout.xaxis = numericAxisCommon;
-      layout.yaxis = { title: '서비스등급 (U열)', ...catAxisCommon };
-    }
-
-    Plotly.react(els.plot, traces, layout, {responsive: true, displaylogo:false});
-  }
-
-  (async function tryAutoLoad(){
-    try {
-      const res = await fetch('data.xlsx', { method: 'HEAD' });
-      if (res.ok) {
-        const get = await fetch('data.xlsx');
-        const ab = await get.arrayBuffer();
-        const rows = await loadWorkbookFromArrayBuffer(ab);
-        ingestRows(rows);
+    // 페이지 로드 후 즉시 기본 파일 시도 (있으면 자동 로드)
+    (async function tryAutoLoad(){
+      try {
+        const res = await fetch('data.xlsx', { method: 'HEAD' });
+        if (res.ok) {
+          const get = await fetch('data.xlsx');
+          const ab = await get.arrayBuffer();
+          const rows = await loadWorkbookFromArrayBuffer(ab);
+          ingestRows(rows);
+        }
+      } catch (e) {
+        // 무시: 기본 파일 없으면 사용자가 업로드하면 됨
       }
-    } catch (e) { /* 기본 파일이 없으면 무시 */ }
-  })();
-</script>
+    })();
+  </script>
+</body>
+</html>
