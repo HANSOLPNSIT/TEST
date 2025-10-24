@@ -13,48 +13,61 @@
       --ink: #e5e7eb;       /* gray-200 */
       --muted: #9ca3af;     /* gray-400 */
       --brand: #60a5fa;     /* blue-400 */
+      --border: #1f2937;    /* gray-800 */
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
-    header { padding: 18px 24px; border-bottom: 1px solid #1f2937; background: linear-gradient(180deg,#0f172a 0%, #0b1222 100%); }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+    header { padding: 18px 24px; border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg,#0f172a 0%, #0b1222 100%); }
     h1 { font-size: 18px; margin: 0 0 6px; }
-    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 18px 24px; }
-    .card { background: var(--panel); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; }
-    label { display: block; margin: 10px 0 6px; color: var(--muted); font-size: 13px; }
-    select, input[type="file"], button { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #374151; background: #0b1222; color: var(--ink); }
+    .wrap { display: grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 18px 24px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    label { display: block; margin: 8px 0 6px; color: var(--muted); font-size: 13px; }
+    select, input[type="file"], button {
+      width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #374151; background: #0b1222; color: var(--ink);
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    /* 첫 행 전용: 오른쪽 버튼 폭 고정으로 '찌그러짐' 방지 */
-    .row-fixed { grid-template-columns: 1fr 220px; align-items: end; }
     #plot { height: 72vh; }
     .hint { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
     .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; background:#0b2546; color:#b9dcff; border:1px solid #1f3b66; }
+    /* 파일업로드 깔끔한 표시 */
+    .file-row { display:flex; gap:10px; align-items:center; }
+    .file-name { flex:1; min-height: 40px; display:flex; align-items:center; padding: 0 12px; border:1px solid #374151; border-radius:12px; background:#0b1222; color:#9ca3af; font-size:13px; }
+    .btn { cursor: pointer; }
   </style>
 </head>
 <body>
   <header>
     <h1>외주용역 박스플롯</h1>
-    <div class="hint">조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열</span> · Y축: <span class="badge">서비스단가=Z열(고정)</span> · 데이터 행: <span class="badge">477–750행 (비어있으면 자동 무시)</span></div>
+    <div class="hint">
+      조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열</span> · Y축: 
+      <span class="badge">서비스단가=Z열(고정)</span> · 데이터 행: <span class="badge">477–750행 (비어있으면 자동 무시)</span>
+    </div>
   </header>
 
   <div class="wrap">
     <section class="card">
-      <div class="row row-fixed">
-        <div>
-          <label>엑셀 파일 불러오기 (기본: 같은 폴더의 <strong>data.xlsx</strong>)</label>
-          <input type="file" id="file" accept=".xlsx,.xls" />
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <button id="loadDefault">기본 파일(data.xlsx) 읽기</button>
-        </div>
+      <!-- 데이터 불러오기 섹션: 버튼/업로드 나란히 + 파일명 표시 -->
+      <label>데이터 불러오기</label>
+      <div class="grid-2">
+        <button id="loadDefault" class="btn">기본 파일(data.xlsx) 읽기</button>
+        <label class="btn" style="display:block; text-align:center; line-height:20px; padding:10px 12px;">
+          <input type="file" id="file" accept=".xlsx,.xls" style="display:none;" />
+          엑셀 파일 업로드
+        </label>
+      </div>
+      <div class="file-row" style="margin-top:10px;">
+        <div class="file-name" id="fileName">선택된 파일이 없습니다.</div>
       </div>
 
-      <label>대분류(분류 · P열) 선택</label>
+      <label style="margin-top:14px;">대분류(분류 · P열) 선택</label>
       <select id="category"></select>
 
-      <!-- 측정값 드롭다운 제거 (Y축 = Z열로 고정) -->
-
-      <label>옵션</label>
+      <label style="margin-top:14px;">옵션</label>
       <div class="row">
         <div>
           <select id="orientation">
@@ -70,7 +83,10 @@
         </div>
       </div>
 
-      <div class="hint">※ 헤더가 없어도 동작하지만, 헤더가 있으면 숫자 컬럼 자동 탐지가 더 정확합니다.<br/>※ 범위: 477–750행만 사용합니다(엑셀 기준 1행부터 시작).</div>
+      <div class="hint" style="margin-top:10px;">
+        ※ 헤더가 없어도 동작하지만, 헤더가 있으면 숫자 컬럼 자동 탐지가 더 정확합니다.<br/>
+        ※ 범위: 477–750행만 사용합니다(엑셀 기준 1행부터 시작).
+      </div>
     </section>
 
     <section class="card">
@@ -92,6 +108,7 @@
 
     const els = {
       file: document.getElementById('file'),
+      fileName: document.getElementById('fileName'),
       loadDefault: document.getElementById('loadDefault'),
       category: document.getElementById('category'),
       orientation: document.getElementById('orientation'),
@@ -121,9 +138,10 @@
       return rows;
     }
 
-    // 파일 인풋 핸들러
-    els.file.addEventListener('change', async (e) => {
+    // 파일 인풋 핸들러 (라벨 클릭으로 열림)
+    document.querySelector('label.btn input[type="file"]').addEventListener('change', async (e) => {
       const f = e.target.files?.[0];
+      els.fileName.textContent = f ? f.name : '선택된 파일이 없습니다.';
       if (!f) return;
       const ab = await f.arrayBuffer();
       const rows = await loadWorkbookFromArrayBuffer(ab);
@@ -137,6 +155,7 @@
         if (!res.ok) throw new Error('data.xlsx를 찾을 수 없습니다. 같은 폴더에 위치시켜 주세요.');
         const ab = await res.arrayBuffer();
         const rows = await loadWorkbookFromArrayBuffer(ab);
+        els.fileName.textContent = 'data.xlsx (기본 파일)';
         ingestRows(rows);
       } catch (err) {
         alert(err.message || err);
@@ -165,7 +184,7 @@
       state.rows = slice;
       state.headers = headerRow.length ? headerRow : generateFallbackHeaders(rows[0]?.length || guessMaxCols(slice));
 
-      // P열(분류), U열(서비스등급)에서 값 가져오기 (비어있으면 제외)
+      // P열(분류) 고유값
       const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
       state.categoryValues = unique(pVals).sort(naturalCompare);
 
@@ -252,37 +271,57 @@
         byGrade.get(grade).push(val);
       }
 
-      // X축을 지정된 순서로 고정
-      const grades = GRADE_ORDER.filter(g => byGrade.has(g));
+      // --- 핵심: X축을 고정하고, 데이터가 없는 등급도 항상 보이게 플레이스홀더 trace 추가 ---
+      const traces = [];
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
 
-      const traces = grades.map(g => {
+      for (const g of GRADE_ORDER) {
         const arr = (byGrade.get(g) || []).filter(Number.isFinite);
-        if (!arr.length) return null;
 
-        // 툴팁 포맷(단위 원)
-        const hover = (orient === 'v')
-          ? `${g}<br>%{y:,.0f}원<extra></extra>`
-          : `${g}<br>%{x:,.0f}원<extra></extra>`;
+        if (arr.length > 0) {
+          // 실제 데이터 trace
+          const hover = (orient === 'v')
+            ? `${g}<br>%{y:,.0f}원<extra></extra>`
+            : `${g}<br>%{x:,.0f}원<extra></extra>`;
 
-        const t = {
-          type: 'box',
-          name: g,
-          boxpoints: showOutliers ? 'suspectedoutliers' : false,
-          jitter: 0.3,
-          pointpos: 0,
-          hovertemplate: hover
-        };
-        if (orient === 'v') {
-          t.y = arr;
+          const t = {
+            type: 'box',
+            name: g,
+            boxpoints: showOutliers ? 'suspectedoutliers' : false,
+            jitter: 0.3,
+            pointpos: 0,
+            hovertemplate: hover
+          };
+          if (orient === 'v') {
+            t.y = arr;
+          } else {
+            t.x = arr;
+            t.orientation = 'h';
+          }
+          traces.push(t);
         } else {
-          t.x = arr;
-          t.orientation = 'h';
+          // 플레이스홀더 trace (축에 카테고리만 고정, 시각 요소는 투명)
+          const placeholder = {
+            type: 'box',
+            name: g,
+            boxpoints: false,
+            hoverinfo: 'skip',
+            line: { color: 'rgba(0,0,0,0)', width: 0 },
+            fillcolor: 'rgba(0,0,0,0)',
+            marker: { color: 'rgba(0,0,0,0)' }
+          };
+          // 값 0을 한 점 넣되 완전 투명 → 축 범위에 0이 포함될 수 있으나 보통 단가가 양수라 영향 미미
+          if (orient === 'v') {
+            placeholder.y = [0];
+          } else {
+            placeholder.x = [0];
+            placeholder.orientation = 'h';
+          }
+          traces.push(placeholder);
         }
-        return t;
-      }).filter(Boolean);
+      }
 
       const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
-      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`; // 보통 "서비스단가"
 
       // 숫자 축 포맷(천단위 콤마 + 원)
       const numericAxisCommon = {
@@ -291,12 +330,17 @@
         gridcolor: '#1f2937',
         zerolinecolor: '#1f2937',
         automargin: true,
-        title: { text: metricName, standoff: 16 } // 제목-눈금 간격 확보
+        title: { text: metricName, standoff: 16 }
       };
       const catAxisCommon = {
         gridcolor: '#1f2937',
         zerolinecolor: '#1f2937',
-        automargin: true
+        automargin: true,
+        categoryorder: 'array',
+        categoryarray: GRADE_ORDER,
+        tickmode: 'array',
+        tickvals: GRADE_ORDER, // 카테고리 라벨 강제 표시
+        ticktext: GRADE_ORDER
       };
 
       const layout = {
@@ -309,21 +353,11 @@
       };
 
       if (orient === 'v') {
-        layout.xaxis = {
-          title: '서비스등급 (U열)',
-          ...catAxisCommon,
-          categoryorder: 'array',
-          categoryarray: GRADE_ORDER
-        };
+        layout.xaxis = { title: '서비스등급 (U열)', ...catAxisCommon };
         layout.yaxis = numericAxisCommon;
       } else {
         layout.xaxis = numericAxisCommon;
-        layout.yaxis = {
-          title: '서비스등급 (U열)',
-          ...catAxisCommon,
-          categoryorder: 'array',
-          categoryarray: GRADE_ORDER
-        };
+        layout.yaxis = { title: '서비스등급 (U열)', ...catAxisCommon };
       }
 
       if (!traces.length){
@@ -343,6 +377,7 @@
           const get = await fetch('data.xlsx');
           const ab = await get.arrayBuffer();
           const rows = await loadWorkbookFromArrayBuffer(ab);
+          els.fileName.textContent = 'data.xlsx (자동 로드)';
           ingestRows(rows);
         }
       } catch (e) {
