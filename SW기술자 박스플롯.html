@@ -23,6 +23,8 @@
     label { display: block; margin: 10px 0 6px; color: var(--muted); font-size: 13px; }
     select, input[type="file"], button { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #374151; background: #0b1222; color: var(--ink); }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    /* 첫 행 전용: 오른쪽 버튼 폭 고정으로 '찌그러짐' 방지 */
+    .row-fixed { grid-template-columns: 1fr 220px; align-items: end; }
     #plot { height: 72vh; }
     .hint { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
     .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; background:#0b2546; color:#b9dcff; border:1px solid #1f3b66; }
@@ -36,7 +38,7 @@
 
   <div class="wrap">
     <section class="card">
-      <div class="row">
+      <div class="row row-fixed">
         <div>
           <label>엑셀 파일 불러오기 (기본: 같은 폴더의 <strong>data.xlsx</strong>)</label>
           <input type="file" id="file" accept=".xlsx,.xls" />
@@ -77,6 +79,9 @@
   </div>
 
   <script>
+    // --- 고정 X축 순서 ---
+    const GRADE_ORDER = ['초급','중급','고급','특급','컨설턴트'];
+
     // --- 설정 상수 ---
     const EXCEL_SHEET_NAME = "외주용역"; // 시트명
     const ROW_START = 477; // 포함 (엑셀 1-based)
@@ -247,9 +252,11 @@
         byGrade.get(grade).push(val);
       }
 
-      const grades = Array.from(byGrade.keys()).sort(naturalCompare);
+      // X축을 지정된 순서로 고정
+      const grades = GRADE_ORDER.filter(g => byGrade.has(g));
+
       const traces = grades.map(g => {
-        const arr = byGrade.get(g).filter(Number.isFinite);
+        const arr = (byGrade.get(g) || []).filter(Number.isFinite);
         if (!arr.length) return null;
 
         // 툴팁 포맷(단위 원)
@@ -282,27 +289,42 @@
         tickformat: ',',
         ticksuffix: '원',
         gridcolor: '#1f2937',
-        zerolinecolor: '#1f2937'
+        zerolinecolor: '#1f2937',
+        automargin: true,
+        title: { text: metricName, standoff: 16 } // 제목-눈금 간격 확보
       };
       const catAxisCommon = {
         gridcolor: '#1f2937',
-        zerolinecolor: '#1f2937'
+        zerolinecolor: '#1f2937',
+        automargin: true
       };
 
       const layout = {
         paper_bgcolor: '#0f172a',
         plot_bgcolor: '#0f172a',
         font: { color: '#e5e7eb' },
-        margin: { t: 48, r: 24, b: 72, l: 72 },
+        margin: { t: 48, r: 24, b: 72, l: 84 },
         title: `${titleCat} · Y축: ${metricName} (Z열)`,
-        xaxis: (orient === 'v')
-          ? { title: '서비스등급 (U열)', ...catAxisCommon }
-          : { title: metricName,       ...numericAxisCommon },
-        yaxis: (orient === 'v')
-          ? { title: metricName,       ...numericAxisCommon }
-          : { title: '서비스등급 (U열)', ...catAxisCommon },
         showlegend: false
       };
+
+      if (orient === 'v') {
+        layout.xaxis = {
+          title: '서비스등급 (U열)',
+          ...catAxisCommon,
+          categoryorder: 'array',
+          categoryarray: GRADE_ORDER
+        };
+        layout.yaxis = numericAxisCommon;
+      } else {
+        layout.xaxis = numericAxisCommon;
+        layout.yaxis = {
+          title: '서비스등급 (U열)',
+          ...catAxisCommon,
+          categoryorder: 'array',
+          categoryarray: GRADE_ORDER
+        };
+      }
 
       if (!traces.length){
         Plotly.purge(els.plot);
