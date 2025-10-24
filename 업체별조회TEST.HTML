@@ -14,164 +14,122 @@
       --brand: #60a5fa;     /* blue-400 */
       --border: #1f2937;    /* gray-800 */
       --accent: #22c55e;    /* green-500 */
-
-      /* 추가: 상단에 다른 고정 배너(예: "열람 중: ...")가 있을 때 겹침 방지 여백 */
-      --safe-top-gap: 28px;
-      /* 좌측 고정 열 폭(헤더/바디 공통 적용) */
-      --col0-w: 120px;  /* PO생성일 */
-      --col1-w: 220px;  /* 프로젝트명 */
     }
     * { box-sizing: border-box; }
     body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; margin: 0; }
-    header {
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--border);
-      position: sticky; top: 0;
-      background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92));
-      backdrop-filter: blur(6px); z-index: 10;
-      /* (2) 타이틀이 위쪽 고정 안내문과 겹치지 않도록 상단 여백 */
-      margin-top: var(--safe-top-gap);
-    }
+    header { padding: 18px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92)); backdrop-filter: blur(6px); z-index: 10; }
     h1 { margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: .2px; }
-    .controls { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1.2fr auto; align-items: center; }
+    .controls { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1.2fr auto; align-items: end; }
     .controls label { font-size: 12px; color: var(--muted); }
     .control { display: grid; gap: 6px; }
-    input[type="text"], input[type="search"], select, button, input[type="file"] {
+    input[type="text"], input[type="search"], button, input[type="file"] {
       background: #0b1220; border: 1px solid var(--border); color: var(--ink);
       padding: 10px 12px; border-radius: 12px; outline: none; font-size: 14px;
     }
     input[type="file"] { padding: 8px 10px; }
     button { cursor: pointer; transition: .2s ease; }
     button.primary { background: var(--brand); border-color: transparent; color: #0b1220; font-weight: 700; }
-    button.ghost { background: transparent; border-color: var(--border); }
+    button.ghost { background: transparent; border-color: var(--border); color: var(--ink); }
 
     main { padding: 16px 20px 80px; }
-    .summary { font-size: 13px; color: var(--muted); margin: 10px 0 16px; }
+    .summary { font-size: 13px; color: var(--muted); margin: 10px 0 16px; display:flex; gap:10px; align-items:center; }
 
-    /* (4) 좌측 고정 열 사용을 위해 테이블 래퍼 추가 */
-    .table-wrap { overflow-x: auto; border-radius: 16px; }
-    table { width: 100%; border-collapse: separate; border-spacing: 0; background: #0b1220; border: 1px solid var(--border); border-radius: 16px; min-width: 900px; table-layout: fixed; }
-    thead th {
-      position: sticky; top: 74px;
-      background: #0d1526; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .2px;
-      border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; z-index: 3;
-    }
+    table { width: 100%; border-collapse: collapse; background: #0b1220; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    thead th { position: sticky; top: 86px; background: #0d1526; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .2px; border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; }
     tbody td { padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
     tbody tr:hover { background: rgba(96,165,250,0.08); }
     .right { text-align: right; }
-    .pill { display:inline-block; padding: 3px 8px; border-radius: 999px; border:1px solid var(--border); font-size: 12px; color: var(--ink); background:#0f1a2f; }
-
-    .chips { display:flex; gap:8px; flex-wrap:wrap; margin: 12px 0 4px; }
-    .chip { border:1px solid var(--border); padding:6px 10px; border-radius:999px; font-size:12px; color:var(--muted); }
-
     .hidden { display: none !important; }
-    .count { font-variant-numeric: tabular-nums; }
+    .chip { border:1px solid var(--border); padding:6px 10px; border-radius:999px; font-size:12px; color:var(--muted); margin-right:6px; }
+      /* 상단 배너(열람 중: 업체별조회 ...)와 겹침 방지 */
+    :root { --topbar-h: 28px; }
+    .top-banner { position: fixed; top: 0; left: 0; right: 0; height: var(--topbar-h); display:flex; align-items:center; gap:8px; padding:0 14px; background:#0a0f1e; color:#cbd5e1; font-size:12px; border-bottom:1px solid var(--border); z-index: 50; }
+    header { top: var(--topbar-h); }
+    thead th { top: calc(86px + var(--topbar-h)); }
 
-    .footer { position: fixed; bottom: 12px; right: 12px; display: flex; gap: 8px; }
+    /* 첫 두 컬럼 고정 (가로 스크롤 시) */
+    .sticky-col-1 { position: sticky; left: 0; background:#0d1526; z-index: 2; }
+    .sticky-col-2 { position: sticky; left: 180px; background:#0d1526; z-index: 2; }
+    tbody td.sticky-col-1, tbody td.sticky-col-2 { background:#0b1220; z-index:1; }
 
-    /* (3) 구매처 요약 정보 */
-    .vendor-info { margin-top: 6px; font-size: 13px; color: var(--ink); }
-    .vendor-info .muted { color: var(--muted); }
-
-    /* (4) 대분류 드롭다운은 화면에서 숨김(요청사항) */
-    .control.cat-control { display: none !important; }
-
-    /* (5) 좌측 고정 열(PO생성일, 프로젝트명) */
-    col.col0 { width: var(--col0-w); }
-    col.col1 { width: var(--col1-w); }
-    th.sticky-col, td.sticky-col { position: sticky; background: #0d1526; z-index: 2; }
-    th.col-0, td.col-0 { left: 0; min-width: var(--col0-w); }
-    th.col-1, td.col-1 { left: calc(var(--col0-w)); min-width: var(--col1-w); }
-    /* 바디 셀 배경 보정(hover 시도 포함) */
-    tbody td.sticky-col { background:#0b1220; }
-    tbody tr:hover td.sticky-col { background: rgba(96,165,250,0.08); }
+    /* 선택한 구매처 표기 */
+    #selectedVendor { font-size:12px; color:#cbd5e1; border:1px solid var(--border); padding:6px 10px; border-radius:999px; display:none; align-self:end; }
   </style>
 </head>
 <body>
+  <div class="top-banner">열람 중: <strong>업체별조회</strong> (업체별조회.html)</div>
   <header>
-    <h1>구매 이력 조회 · 업체/대분류 필터 + 전체 검색</h1>
+    <h1>구매 이력 조회 · 업체/대분류 드롭다운 + 전체 검색</h1>
     <div class="controls">
       <div class="control">
-        <label>데이터 파일 (Excel .xlsx) — 기본: <code>data.xlsx</code></label>
+        <label>엑셀 파일 (GitHub 기본 로드·필요시 교체 업로드)</label>
         <input id="file" type="file" accept=".xlsx,.xls" />
       </div>
       <div class="control">
-        <label>구매처명 (검색 가능 드롭다운)</label>
-        <!-- datalist 로 검색 가능한 드롭다운 구현 -->
+        <label>구매처명 (검색 가능)</label>
         <input id="vendorInput" list="vendorList" placeholder="모든 구매처" />
         <datalist id="vendorList"></datalist>
-        <!-- (3) 선택한 구매처 요약 정보 -->
-        <div id="vendorInfo" class="vendor-info muted"></div>
       </div>
-      <!-- (4) 대분류 컨트롤은 유지하되 숨김 처리 -->
-      <div class="control cat-control">
-        <label>대분류 (검색 가능 드롭다운)</label>
+      <div class="control" style="display:none">
+        <label>대분류 (검색 가능)</label>
         <input id="catInput" list="catList" placeholder="모든 대분류" />
         <datalist id="catList"></datalist>
       </div>
+      <span id="selectedVendor" class="chip" aria-live="polite"></span>
       <div class="control">
         <label>전체 데이터 검색</label>
         <input id="globalSearch" type="search" placeholder="프로젝트명, 분류, 비고 등 키워드" />
       </div>
     </div>
-    <div class="chips" id="activeFilters" aria-live="polite"></div>
-    <div class="summary"><span class="count" id="countShown">0</span>건 / 총 <span class="count" id="countTotal">0</span>건 · 정렬: <button class="ghost" id="sortBtn" title="PO생성일 정렬 전환">PO생성일 ⬇</button></div>
+    <div class="summary">
+      <span class="chip">표시 <span id="countShown">0</span> / 총 <span id="countTotal">0</span></span>
+      <span>정렬: <button class="ghost" id="sortBtn" title="PO생성일 정렬 전환">PO생성일 ⬇</button></span>
+      <button id="resetBtn" class="ghost">필터 초기화</button>
+    </div>
   </header>
 
   <main>
-    <div class="table-wrap">
-      <table id="table" aria-describedby="countShown countTotal">
-        <colgroup>
-          <col class="col0"/>
-          <col class="col1"/>
-          <col/>
-          <col/>
-          <col/>
-          <col/>
-          <col/>
-          <col/>
-          <col/>
-          <col/>
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="sticky-col col-0">PO생성일</th>
-            <th class="sticky-col col-1">프로젝트명</th>
-            <th>분류</th>
-            <th class="right">서비스단가</th>
-            <th>서비스단위</th>
-            <th>서비스등급내역</th>
-            <th class="right">서비스수량</th>
-            <th>비고</th>
-            <th class="hidden">구매처명</th>
-            <th class="hidden">대분류</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
+    <table id="table" aria-describedby="countShown countTotal">
+      <thead>
+        <tr>
+          <th class="sticky-col-1">PO생성일</th>
+          <th class="sticky-col-2">프로젝트명</th>
+          <th>분류</th>
+          <th class="right">서비스단가</th>
+          <th>서비스단위</th>
+          <th>서비스등급내역</th>
+          <th class="right">서비스수량</th>
+          <th>비고</th>
+          <th class="hidden">구매처명</th>
+          <th class="hidden">대분류</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
   </main>
 
-  <div class="footer">
-    <button id="resetBtn" class="ghost">필터 초기화</button>
-    <button id="reloadBtn" class="primary">기본파일 다시 불러오기</button>
-  </div>
-
   <script>
-    // ====== 설정: 시트 및 컬럼 헤더 명칭 표준화 ======
+    // ====== 설정: 기본 GitHub 원격 엑셀 경로 (여러 후보 시도) ======
+    const GITHUB_RAW_CANDIDATES = [
+      'https://raw.githubusercontent.com/HANSOLPNSIT/purchasing5919/main/data.xlsx',
+      'https://raw.githubusercontent.com/HANSOLPNSIT/purchasing5919/main/docs/data.xlsx',
+      'https://raw.githubusercontent.com/HANSOLPNSIT/purchasing5919/gh-pages/data.xlsx',
+      'https://raw.githubusercontent.com/HANSOLPNSIT/purchasing5919/gh-pages/docs/data.xlsx'
+    ];
+
     const PREFERRED_SHEET_NAMES = ["외주용역", "Sheet1", "data", "DATA"]; // 우선 탐색 순서
-    // 입력 엑셀의 열 헤더를 다음 키로 매핑 (대/소문자·공백 무시 매칭)
+    // 헤더 매핑(대/소문자·공백 무시)
     const HEADER_MAP = {
-      vendor: ["구매처명", "업체", "벤더", "Vendor", "매입처"],
-      category: ["대분류", "분류(대)", "Category", "카테고리"],
-      poDate: ["PO생성일", "발주생성일", "주문일", "PO Date", "PO일자"],
-      project: ["프로젝트명", "사업명", "프로젝트", "Project"],
-      type: ["분류", "소분류", "Type"],
-      unitPrice: ["서비스단가", "단가", "UnitPrice", "금액"],
-      unit: ["서비스단위", "단위", "Unit"],
-      grade: ["서비스등급내역", "등급", "Grade"],
-      qty: ["서비스수량", "수량", "Qty", "수량(EA)"],
-      note: ["비고", "메모", "Remark", "Note"]
+      vendor: ["구매처명", "업체", "벤더", "vendor", "매입처"],
+      category: ["대분류", "분류(대)", "category", "카테고리"],
+      poDate: ["PO생성일", "발주생성일", "주문일", "po date", "po일자"],
+      project: ["프로젝트명", "사업명", "project", "프로젝트"],
+      type: ["분류", "소분류", "type"],
+      unitPrice: ["서비스단가", "단가", "unitprice", "금액"],
+      unit: ["서비스단위", "단위", "unit"],
+      grade: ["서비스등급내역", "등급", "grade"],
+      qty: ["서비스수량", "수량", "qty", "수량(ea)"],
+      note: ["비고", "메모", "remark", "note"]
     };
 
     let rawRows = [];     // 원본 전체 행
@@ -179,24 +137,16 @@
     let sortAsc = false;  // 기본: PO생성일 내림차순(최근 우선)
 
     const $ = (sel) => document.querySelector(sel);
-    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
     const tbody = $("#tbody");
     const vendorInput = $("#vendorInput");
-    const catInput = $("#catInput");     // (숨김 처리됨)
-    const vendorList = $("#vendorList");
-    const catList = $("#catList");       // (숨김 처리됨)
+    const catInput = $("#catInput");
+    const catList = $("#catList");
+    const selectedVendor = $("#selectedVendor");
     const globalSearch = $("#globalSearch");
-
     const countShown = $("#countShown");
     const countTotal = $("#countTotal");
-
     const sortBtn = $("#sortBtn");
-
     const resetBtn = $("#resetBtn");
-    const reloadBtn = $("#reloadBtn");
-
-    const vendorInfo = $("#vendorInfo");
 
     // 숫자/통화/날짜 유틸
     const fmtKRW = (n) => (n === null || n === undefined || n === "") ? "" :
@@ -204,7 +154,6 @@
     const fmtQty = (n) => (n === null || n === undefined || n === "") ? "" : new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 }).format(Number(n));
     const parseDate = (v) => {
       if (!v && v !== 0) return null;
-      // Excel serial date 또는 문자열 처리
       if (typeof v === 'number') {
         const date = XLSX.SSF.parse_date_code(v);
         return new Date(date.y, date.m - 1, date.d);
@@ -214,7 +163,6 @@
       return isNaN(tryDate) ? null : tryDate;
     };
     const fmtDate = (d) => !d ? "" : d.toISOString().slice(0,10);
-
     const norm = (s) => (s ?? "").toString().trim();
 
     function detectHeaders(headerRow) {
@@ -232,7 +180,6 @@
     }
 
     function loadSheet(workbook) {
-      // 시트 선택
       let sheetName = workbook.SheetNames.find(n => PREFERRED_SHEET_NAMES.includes(n)) || workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
@@ -240,13 +187,6 @@
 
       const header = rows[0];
       const map = detectHeaders(header);
-
-      // 필수 컬럼 확인
-      const required = ["vendor", "poDate", "project", "unitPrice"]; // 핵심 필드
-      const missing = required.filter(k => map[k] === -1);
-      if (missing.length) {
-        console.warn("누락된 헤더:", missing);
-      }
 
       rawRows = rows.slice(1).map(r => ({
         vendor: norm(r[map.vendor]),
@@ -264,12 +204,9 @@
       // 초기 정렬: PO생성일 최근 ↓
       sortAsc = false;
 
-      // 필터용 옵션 만들기
+      // 옵션 갱신 및 렌더
       populateOptions();
-
-      // 렌더
       applyFiltersAndRender();
-
       countTotal.textContent = rawRows.length.toLocaleString('ko-KR');
     }
 
@@ -282,33 +219,26 @@
     }
 
     function populateOptions() {
-      // 고유 값 추출
       const vendors = [...new Set(rawRows.map(r => r.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'ko'));
-      const cats = [...new Set(rawRows.map(r => r.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'ko'));
-
-      vendorList.innerHTML = vendors.map(v => `<option value="${v}"></option>`).join("");
-      // (4) 화면에서는 숨기지만 datalist 자체는 유지
-      catList.innerHTML = cats.map(v => `<option value="${v}"></option>`).join("");
-    }
-
-    function activeFilterChips() {
-      const chips = [];
-      if (vendorInput.value) chips.push(`<span class="chip">구매처명: ${escapeHtml(vendorInput.value)}</span>`);
-      // (4) 대분류 칩은 표시하지 않음
-      if (globalSearch.value) chips.push(`<span class="chip">검색: “${escapeHtml(globalSearch.value)}”</span>`);
-      $("#activeFilters").innerHTML = chips.join("");
+      vendorList.innerHTML = vendors.map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
     }
 
     function applyFiltersAndRender() {
       const vFilter = norm(vendorInput.value);
-      // (4) 대분류 필터는 사용하지 않음
       const q = norm(globalSearch.value).toLowerCase();
+
+      // 선택한 구매처명 표시
+      if (vFilter) {
+        selectedVendor.style.display = 'inline-flex';
+        selectedVendor.textContent = `선택한 구매처: ${vFilter}`;
+      } else {
+        selectedVendor.style.display = 'none';
+        selectedVendor.textContent = '';
+      }
 
       viewRows = rawRows.filter(r => {
         const vendorOk = !vFilter || r.vendor === vFilter;
-        const text = [
-          r.vendor, r.category, r.project, r.type, r.unit, r.grade, r.note, r.unitPrice, r.qty, fmtDate(r.poDate)
-        ].join(" \u241F ").toLowerCase();
+        const text = [r.vendor, r.category, r.project, r.type, r.unit, r.grade, r.note, r.unitPrice, r.qty, fmtDate(r.poDate)].join(" ␟ ").toLowerCase();
         const qOk = !q || text.includes(q);
         return vendorOk && qOk;
       });
@@ -316,15 +246,18 @@
       sortRows();
       renderTable();
       countShown.textContent = viewRows.length.toLocaleString('ko-KR');
-      activeFilterChips();
-      updateVendorInfo(); // (3) 선택 구매처 정보 표시
+    });
+
+      sortRows();
+      renderTable();
+      countShown.textContent = viewRows.length.toLocaleString('ko-KR');
     }
 
     function renderTable() {
       const rowsHtml = viewRows.map(r => `
         <tr>
-          <td class="sticky-col col-0">${fmtDate(r.poDate)}</td>
-          <td class="sticky-col col-1">${escapeHtml(r.project)}</td>
+          <td class="sticky-col-1">${fmtDate(r.poDate)}</td>
+          <td class="sticky-col-2">${escapeHtml(r.project)}</td>
           <td>${escapeHtml(r.type)}</td>
           <td class="right">${fmtKRW(r.unitPrice)}</td>
           <td>${escapeHtml(r.unit)}</td>
@@ -338,31 +271,11 @@
     }
 
     function escapeHtml(s) {
-      return String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));
-    }
-
-    // (3) 선택된 구매처의 요약 정보 표기
-    function updateVendorInfo() {
-      const v = norm(vendorInput.value);
-      if (!v) { vendorInfo.textContent = ''; vendorInfo.classList.add('muted'); return; }
-      const rows = rawRows.filter(r => r.vendor === v);
-      if (!rows.length) { vendorInfo.textContent = '일치하는 구매처 데이터가 없습니다.'; vendorInfo.classList.add('muted'); return; }
-      const dates = rows.map(r => r.poDate).filter(Boolean).map(d => d.getTime());
-      const minD = dates.length ? new Date(Math.min(...dates)) : null;
-      const maxD = dates.length ? new Date(Math.max(...dates)) : null;
-      const sumUnitPrice = rows.reduce((acc, r) => acc + (Number.isFinite(r.unitPrice) ? r.unitPrice : 0), 0);
-
-      vendorInfo.classList.remove('muted');
-      vendorInfo.innerHTML =
-        `<span class="pill">선택한 업체: ${escapeHtml(v)}</span>
-         <span class="pill">건수: ${rows.length.toLocaleString('ko-KR')}건</span>
-         <span class="pill">최초 PO: ${fmtDate(minD) || '-'}</span>
-         <span class="pill">최신 PO: ${fmtDate(maxD) || '-'}</span>
-         <span class="pill">단가 합계: ${fmtKRW(sumUnitPrice)}</span>`;
+      return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[c]));
     }
 
     // ====== 이벤트 바인딩 ======
-    $("#file").addEventListener('change', async (e) => {
+    document.getElementById('file').addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
       const buf = await file.arrayBuffer();
@@ -370,9 +283,8 @@
       loadSheet(wb);
     });
 
-    vendorInput.addEventListener('input', applyFiltersAndRender);
-    // (4) 카테고리 입력 이벤트 바인딩 제거(숨김/미사용)
-    globalSearch.addEventListener('input', applyFiltersAndRender);
+    vendorInput.addEventListener('input', () => { applyFiltersAndRender(); });
+        globalSearch.addEventListener('input', applyFiltersAndRender);
 
     sortBtn.addEventListener('click', () => {
       sortAsc = !sortAsc;
@@ -383,37 +295,34 @@
 
     resetBtn.addEventListener('click', () => {
       vendorInput.value = "";
-      // (4) category는 사용하지 않으므로 초기화 불필요
+      catInput.value = "";
       globalSearch.value = "";
       applyFiltersAndRender();
     });
 
-    reloadBtn.addEventListener('click', () => {
-      loadDefault();
-    });
-
-    // ====== 기본 파일(data.xlsx) 로드 ======
-    async function loadDefault() {
-      try {
-        const res = await fetch('data.xlsx');
-        if (!res.ok) throw new Error('기본 파일(data.xlsx)을 찾을 수 없습니다. 상단에서 파일을 선택하세요.');
-        const buf = await res.arrayBuffer();
-        const wb = XLSX.read(buf);
-        loadSheet(wb);
-      } catch (err) {
-        console.warn(err);
-        // 빈 표시 초기화
-        rawRows = [];
-        viewRows = [];
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 상단에서 Excel 파일을 선택하세요.</td></tr>`;
-        countShown.textContent = '0';
-        countTotal.textContent = '0';
-        vendorInfo.textContent = '';
+    // ====== GitHub data.xlsx 자동 로드 (후보 경로 순차 시도) ======
+    async function loadFromGithub() {
+      for (const url of GITHUB_RAW_CANDIDATES) {
+        try {
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) continue;
+          const buf = await res.arrayBuffer();
+          const wb = XLSX.read(buf);
+          loadSheet(wb);
+          console.log('Loaded:', url);
+          return;
+        } catch (e) {
+          // 다음 후보 계속 시도
+        }
       }
+      // 실패 시 안내 메시지
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">GitHub에서 기본 \`data.xlsx\`를 찾을 수 없습니다. 상단에서 파일을 선택하세요.</td></tr>`;
+      countShown.textContent = '0';
+      countTotal.textContent = '0';
     }
 
     // 초기 로드
-    loadDefault();
+    loadFromGithub();
   </script>
 </body>
 </html>
