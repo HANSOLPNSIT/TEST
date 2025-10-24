@@ -43,6 +43,8 @@
   .right{text-align:right;}
   .hidden{display:none;}
   .footer{position:fixed;bottom:12px;right:12px;display:flex;gap:8px;}
+  .debug-info{background:#1a1a2e;border:1px solid var(--border);padding:12px;margin:12px 0;
+    border-radius:8px;font-family:monospace;font-size:12px;color:#fbbf24;}
 </style>
 </head>
 <body>
@@ -67,6 +69,7 @@
   <div class="summary">
     <span id="countShown">0</span>건 / 총 <span id="countTotal">0</span>건
   </div>
+  <div id="debugInfo" class="debug-info" style="display:none;"></div>
 </header>
 
 <main>
@@ -82,7 +85,7 @@
         <th class="sortable" data-key="grade">서비스 등급내역</th>
         <th class="sortable right" data-key="qty">서비스수량</th>
         <th class="sortable" data-key="note">비고</th>
-        <th class="sortable" data-key="vendor">구매처명</th>
+        <th class="hidden">구매처명</th>
         <th class="hidden">대분류</th>
       </tr>
     </thead>
@@ -121,12 +124,19 @@ const vendorSelect=$("#vendorSelect");
 const globalSearch=$("#globalSearch");
 const countShown=$("#countShown");
 const countTotal=$("#countTotal");
+const debugInfo=$("#debugInfo");
 
 const fmtKRW=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
 const fmtQty=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(Number(n));
 const parseDate=(v)=>{if(!v&&v!==0)return null;if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return new Date(d.y,d.m-1,d.d);}const s=String(v).trim().replaceAll(".","-").replaceAll("/","-");const dt=new Date(s);return isNaN(dt)?null:dt;};
 const fmtDate=(d)=>!d?"":d.toISOString().slice(0,10);
 const norm=(s)=>(s??"").toString().trim();
+
+function showDebug(message){
+  debugInfo.style.display='block';
+  debugInfo.innerHTML+=message+'<br>';
+  console.log(message);
+}
 
 function detectHeaders(headerRow){
   const normalizeForMatch=(s)=>String(s??"").toLowerCase()
@@ -136,12 +146,16 @@ function detectHeaders(headerRow){
   const h={};
   const row=headerRow.map(h=>normalizeForMatch(h));
   
+  showDebug(`📋 실제 헤더: ${JSON.stringify(headerRow)}`);
+  showDebug(`🔄 정규화된 헤더: ${JSON.stringify(row)}`);
+  
   for(const [key,aliases] of Object.entries(HEADER_MAP)){
     let idx=-1;
     for(const a of aliases){
       const i=row.indexOf(normalizeForMatch(a));
       if(i!==-1){
         idx=i;
+        if(key==='grade'||key==='projectCode') showDebug(`✅ '${key}' 매칭 성공: "${a}" → 인덱스 ${idx}`);
         break;
       }
     }
@@ -151,6 +165,7 @@ function detectHeaders(headerRow){
         const i=noSpaceRow.indexOf(normalizeForMatch(a).replace(/\s+/g,''));
         if(i!==-1){
           idx=i;
+          if(key==='grade'||key==='projectCode') showDebug(`✅ '${key}' 매칭 성공 (공백제거): "${a}" → 인덱스 ${idx}`);
           break;
         }
       }
@@ -158,18 +173,31 @@ function detectHeaders(headerRow){
     h[key]=idx;
   }
   
+  if(h.grade===-1){
+    showDebug("❌ [오류] '서비스 등급내역' 열을 찾지 못했습니다!");
+  }
+  if(h.projectCode===-1){
+    showDebug("⚠️ [경고] '프로젝트코드' 열을 찾지 못했습니다.");
+  }
+  
+  showDebug(`🔍 최종 컬럼 매칭: ${JSON.stringify(h)}`);
   return h;
 }
 
 function loadSheet(wb){
+  debugInfo.innerHTML='';
+  debugInfo.style.display='none';
+  
   const name=wb.SheetNames.find(n=>PREFERRED_SHEET_NAMES.includes(n))||wb.SheetNames[0];
+  showDebug(`📊 로드된 시트: "${name}"`);
+  
   const sheet=wb.Sheets[name];
   const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
   if(!rows.length) return;
   
   const map=detectHeaders(rows[0]);
   
-  rawRows=rows.slice(1).map((r)=>{
+  rawRows=rows.slice(1).map((r,idx)=>{
     const obj={
       vendor:norm(r[map.vendor]),
       category:norm(r[map.category]),
@@ -183,6 +211,11 @@ function loadSheet(wb){
       qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
       note:norm(r[map.note])
     };
+    
+    if(idx<3 && (map.grade!==-1||map.projectCode!==-1)){
+      if(map.projectCode!==-1) showDebug(`📝 행 ${idx+1} projectCode: "${r[map.projectCode]}" → "${obj.projectCode}"`);
+      if(map.grade!==-1) showDebug(`📝 행 ${idx+1} grade: "${r[map.grade]}" → "${obj.grade}"`);
+    }
     
     obj._search=[obj.vendor,obj.category,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
     return obj;
@@ -205,32 +238,19 @@ function sortRows(){
     let bv=b[sortKey];
     
     if(sortKey==='poDate'){
-      const at=av?.getTime();
-      const bt=bv?.getTime();
-      if(at===undefined||at===null||isNaN(at)){
-        if(bt===undefined||bt===null||isNaN(bt)) return 0;
-        return sortAsc?1:-1;
-      }
-      if(bt===undefined||bt===null||isNaN(bt)) return sortAsc?-1:1;
-      return sortAsc?at-bt:bt-at;
+      av=av?.getTime()??-Infinity;
+      bv=bv?.getTime()??-Infinity;
+      return sortAsc?av-bv:bv-av;
     }
     
     if(sortKey==='unitPrice'||sortKey==='qty'){
-      const an=av===""||av===null||av===undefined?NaN:Number(av);
-      const bn=bv===""||bv===null||bv===undefined?NaN:Number(bv);
-      if(isNaN(an)){
-        if(isNaN(bn)) return 0;
-        return sortAsc?1:-1;
-      }
-      if(isNaN(bn)) return sortAsc?-1:1;
-      return sortAsc?an-bn:bn-an;
+      av=av===""?-Infinity:Number(av);
+      bv=bv===""?-Infinity:Number(bv);
+      return sortAsc?av-bv:bv-av;
     }
     
-    av=String(av??"").toLowerCase();
-    bv=String(bv??"").toLowerCase();
-    if(av===""&&bv==="") return 0;
-    if(av==="") return sortAsc?1:-1;
-    if(bv==="") return sortAsc?-1:1;
+    av=String(av??"");
+    bv=String(bv??"");
     const cmp=av.localeCompare(bv,'ko');
     return sortAsc?cmp:-cmp;
   });
@@ -263,7 +283,7 @@ function renderTable(){
     <td>${escapeHtml(r.grade)}</td>
     <td class="right">${fmtQty(r.qty)}</td>
     <td>${escapeHtml(r.note)}</td>
-    <td>${escapeHtml(r.vendor)}</td>
+    <td class="hidden">${escapeHtml(r.vendor)}</td>
     <td class="hidden">${escapeHtml(r.category)}</td>
   </tr>`).join("");
   tbody.innerHTML=html||`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
@@ -320,6 +340,7 @@ async function loadDefault(){
     loadSheet(wb);
   }catch(e){
     console.warn(e);
+    showDebug(`⚠️ 기본 파일 로드 실패: ${e.message}`);
     tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
   }
 }
