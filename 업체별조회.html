@@ -14,10 +14,24 @@
       --brand: #60a5fa;     /* blue-400 */
       --border: #1f2937;    /* gray-800 */
       --accent: #22c55e;    /* green-500 */
+
+      /* 추가: 상단에 다른 고정 배너(예: "열람 중: ...")가 있을 때 겹침 방지 여백 */
+      --safe-top-gap: 28px;
+      /* 좌측 고정 열 폭(헤더/바디 공통 적용) */
+      --col0-w: 120px;  /* PO생성일 */
+      --col1-w: 220px;  /* 프로젝트명 */
     }
     * { box-sizing: border-box; }
     body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; margin: 0; }
-    header { padding: 18px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92)); backdrop-filter: blur(6px); z-index: 10; }
+    header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0;
+      background: linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92));
+      backdrop-filter: blur(6px); z-index: 10;
+      /* (2) 타이틀이 위쪽 고정 안내문과 겹치지 않도록 상단 여백 */
+      margin-top: var(--safe-top-gap);
+    }
     h1 { margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: .2px; }
     .controls { display: grid; gap: 10px; grid-template-columns: 1fr 1fr 1.2fr auto; align-items: center; }
     .controls label { font-size: 12px; color: var(--muted); }
@@ -34,8 +48,14 @@
     main { padding: 16px 20px 80px; }
     .summary { font-size: 13px; color: var(--muted); margin: 10px 0 16px; }
 
-    table { width: 100%; border-collapse: collapse; background: #0b1220; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
-    thead th { position: sticky; top: 74px; background: #0d1526; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .2px; border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; }
+    /* (4) 좌측 고정 열 사용을 위해 테이블 래퍼 추가 */
+    .table-wrap { overflow-x: auto; border-radius: 16px; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; background: #0b1220; border: 1px solid var(--border); border-radius: 16px; min-width: 900px; table-layout: fixed; }
+    thead th {
+      position: sticky; top: 74px;
+      background: #0d1526; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .2px;
+      border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; z-index: 3;
+    }
     tbody td { padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
     tbody tr:hover { background: rgba(96,165,250,0.08); }
     .right { text-align: right; }
@@ -48,6 +68,23 @@
     .count { font-variant-numeric: tabular-nums; }
 
     .footer { position: fixed; bottom: 12px; right: 12px; display: flex; gap: 8px; }
+
+    /* (3) 구매처 요약 정보 */
+    .vendor-info { margin-top: 6px; font-size: 13px; color: var(--ink); }
+    .vendor-info .muted { color: var(--muted); }
+
+    /* (4) 대분류 드롭다운은 화면에서 숨김(요청사항) */
+    .control.cat-control { display: none !important; }
+
+    /* (5) 좌측 고정 열(PO생성일, 프로젝트명) */
+    col.col0 { width: var(--col0-w); }
+    col.col1 { width: var(--col1-w); }
+    th.sticky-col, td.sticky-col { position: sticky; background: #0d1526; z-index: 2; }
+    th.col-0, td.col-0 { left: 0; min-width: var(--col0-w); }
+    th.col-1, td.col-1 { left: calc(var(--col0-w)); min-width: var(--col1-w); }
+    /* 바디 셀 배경 보정(hover 시도 포함) */
+    tbody td.sticky-col { background:#0b1220; }
+    tbody tr:hover td.sticky-col { background: rgba(96,165,250,0.08); }
   </style>
 </head>
 <body>
@@ -63,8 +100,11 @@
         <!-- datalist 로 검색 가능한 드롭다운 구현 -->
         <input id="vendorInput" list="vendorList" placeholder="모든 구매처" />
         <datalist id="vendorList"></datalist>
+        <!-- (3) 선택한 구매처 요약 정보 -->
+        <div id="vendorInfo" class="vendor-info muted"></div>
       </div>
-      <div class="control">
+      <!-- (4) 대분류 컨트롤은 유지하되 숨김 처리 -->
+      <div class="control cat-control">
         <label>대분류 (검색 가능 드롭다운)</label>
         <input id="catInput" list="catList" placeholder="모든 대분류" />
         <datalist id="catList"></datalist>
@@ -79,23 +119,37 @@
   </header>
 
   <main>
-    <table id="table" aria-describedby="countShown countTotal">
-      <thead>
-        <tr>
-          <th>PO생성일</th>
-          <th>프로젝트명</th>
-          <th>분류</th>
-          <th class="right">서비스단가</th>
-          <th>서비스단위</th>
-          <th>서비스등급내역</th>
-          <th class="right">서비스수량</th>
-          <th>비고</th>
-          <th class="hidden">구매처명</th>
-          <th class="hidden">대분류</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+    <div class="table-wrap">
+      <table id="table" aria-describedby="countShown countTotal">
+        <colgroup>
+          <col class="col0"/>
+          <col class="col1"/>
+          <col/>
+          <col/>
+          <col/>
+          <col/>
+          <col/>
+          <col/>
+          <col/>
+          <col/>
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="sticky-col col-0">PO생성일</th>
+            <th class="sticky-col col-1">프로젝트명</th>
+            <th>분류</th>
+            <th class="right">서비스단가</th>
+            <th>서비스단위</th>
+            <th>서비스등급내역</th>
+            <th class="right">서비스수량</th>
+            <th>비고</th>
+            <th class="hidden">구매처명</th>
+            <th class="hidden">대분류</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
   </main>
 
   <div class="footer">
@@ -129,9 +183,9 @@
 
     const tbody = $("#tbody");
     const vendorInput = $("#vendorInput");
-    const catInput = $("#catInput");
+    const catInput = $("#catInput");     // (숨김 처리됨)
     const vendorList = $("#vendorList");
-    const catList = $("#catList");
+    const catList = $("#catList");       // (숨김 처리됨)
     const globalSearch = $("#globalSearch");
 
     const countShown = $("#countShown");
@@ -141,6 +195,8 @@
 
     const resetBtn = $("#resetBtn");
     const reloadBtn = $("#reloadBtn");
+
+    const vendorInfo = $("#vendorInfo");
 
     // 숫자/통화/날짜 유틸
     const fmtKRW = (n) => (n === null || n === undefined || n === "") ? "" :
@@ -185,7 +241,7 @@
       const header = rows[0];
       const map = detectHeaders(header);
 
-      // 필수 컬럼 확인 (vendor, category, poDate 중 최소 vendor/poDate는 있어야 함)
+      // 필수 컬럼 확인
       const required = ["vendor", "poDate", "project", "unitPrice"]; // 핵심 필드
       const missing = required.filter(k => map[k] === -1);
       if (missing.length) {
@@ -207,7 +263,6 @@
 
       // 초기 정렬: PO생성일 최근 ↓
       sortAsc = false;
-      sortRows();
 
       // 필터용 옵션 만들기
       populateOptions();
@@ -232,41 +287,44 @@
       const cats = [...new Set(rawRows.map(r => r.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'ko'));
 
       vendorList.innerHTML = vendors.map(v => `<option value="${v}"></option>`).join("");
+      // (4) 화면에서는 숨기지만 datalist 자체는 유지
       catList.innerHTML = cats.map(v => `<option value="${v}"></option>`).join("");
     }
 
     function activeFilterChips() {
       const chips = [];
       if (vendorInput.value) chips.push(`<span class="chip">구매처명: ${escapeHtml(vendorInput.value)}</span>`);
-      if (catInput.value) chips.push(`<span class="chip">대분류: ${escapeHtml(catInput.value)}</span>`);
+      // (4) 대분류 칩은 표시하지 않음
       if (globalSearch.value) chips.push(`<span class="chip">검색: “${escapeHtml(globalSearch.value)}”</span>`);
       $("#activeFilters").innerHTML = chips.join("");
     }
 
     function applyFiltersAndRender() {
       const vFilter = norm(vendorInput.value);
-      const cFilter = norm(catInput.value);
+      // (4) 대분류 필터는 사용하지 않음
       const q = norm(globalSearch.value).toLowerCase();
 
       viewRows = rawRows.filter(r => {
         const vendorOk = !vFilter || r.vendor === vFilter;
-        const catOk = !cFilter || r.category === cFilter;
-        const text = [r.vendor, r.category, r.project, r.type, r.unit, r.grade, r.note, r.unitPrice, r.qty, fmtDate(r.poDate)].join(" \u241F ").toLowerCase();
+        const text = [
+          r.vendor, r.category, r.project, r.type, r.unit, r.grade, r.note, r.unitPrice, r.qty, fmtDate(r.poDate)
+        ].join(" \u241F ").toLowerCase();
         const qOk = !q || text.includes(q);
-        return vendorOk && catOk && qOk;
+        return vendorOk && qOk;
       });
 
       sortRows();
       renderTable();
       countShown.textContent = viewRows.length.toLocaleString('ko-KR');
       activeFilterChips();
+      updateVendorInfo(); // (3) 선택 구매처 정보 표시
     }
 
     function renderTable() {
       const rowsHtml = viewRows.map(r => `
         <tr>
-          <td>${fmtDate(r.poDate)}</td>
-          <td>${escapeHtml(r.project)}</td>
+          <td class="sticky-col col-0">${fmtDate(r.poDate)}</td>
+          <td class="sticky-col col-1">${escapeHtml(r.project)}</td>
           <td>${escapeHtml(r.type)}</td>
           <td class="right">${fmtKRW(r.unitPrice)}</td>
           <td>${escapeHtml(r.unit)}</td>
@@ -280,7 +338,27 @@
     }
 
     function escapeHtml(s) {
-      return String(s ?? "").replace(/[&<>"] /g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]||c));
+      return String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));
+    }
+
+    // (3) 선택된 구매처의 요약 정보 표기
+    function updateVendorInfo() {
+      const v = norm(vendorInput.value);
+      if (!v) { vendorInfo.textContent = ''; vendorInfo.classList.add('muted'); return; }
+      const rows = rawRows.filter(r => r.vendor === v);
+      if (!rows.length) { vendorInfo.textContent = '일치하는 구매처 데이터가 없습니다.'; vendorInfo.classList.add('muted'); return; }
+      const dates = rows.map(r => r.poDate).filter(Boolean).map(d => d.getTime());
+      const minD = dates.length ? new Date(Math.min(...dates)) : null;
+      const maxD = dates.length ? new Date(Math.max(...dates)) : null;
+      const sumUnitPrice = rows.reduce((acc, r) => acc + (Number.isFinite(r.unitPrice) ? r.unitPrice : 0), 0);
+
+      vendorInfo.classList.remove('muted');
+      vendorInfo.innerHTML =
+        `<span class="pill">선택한 업체: ${escapeHtml(v)}</span>
+         <span class="pill">건수: ${rows.length.toLocaleString('ko-KR')}건</span>
+         <span class="pill">최초 PO: ${fmtDate(minD) || '-'}</span>
+         <span class="pill">최신 PO: ${fmtDate(maxD) || '-'}</span>
+         <span class="pill">단가 합계: ${fmtKRW(sumUnitPrice)}</span>`;
     }
 
     // ====== 이벤트 바인딩 ======
@@ -293,7 +371,7 @@
     });
 
     vendorInput.addEventListener('input', applyFiltersAndRender);
-    catInput.addEventListener('input', applyFiltersAndRender);
+    // (4) 카테고리 입력 이벤트 바인딩 제거(숨김/미사용)
     globalSearch.addEventListener('input', applyFiltersAndRender);
 
     sortBtn.addEventListener('click', () => {
@@ -305,7 +383,7 @@
 
     resetBtn.addEventListener('click', () => {
       vendorInput.value = "";
-      catInput.value = "";
+      // (4) category는 사용하지 않으므로 초기화 불필요
       globalSearch.value = "";
       applyFiltersAndRender();
     });
@@ -330,6 +408,7 @@
         tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 상단에서 Excel 파일을 선택하세요.</td></tr>`;
         countShown.textContent = '0';
         countTotal.textContent = '0';
+        vendorInfo.textContent = '';
       }
     }
 
