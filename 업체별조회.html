@@ -1,302 +1,389 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>구매 이력 조회 · 업체 드롭다운 + 전체 검색</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>
-  :root{
-    --bg:#0f172a;--panel:#111827;--ink:#e5e7eb;--muted:#9ca3af;--brand:#60a5fa;--border:#1f2937;
-    --safe-top-gap:28px; --col0-w:120px; --col1-w:220px; --thead-top:74px;
-  }
-  *{box-sizing:border-box}
-  body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;margin:0}
-  header{padding:18px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(15,23,42,.92));backdrop-filter:blur(6px);z-index:10;margin-top:var(--safe-top-gap)}
-  h1{margin:0 0 10px;font-size:20px;font-weight:700;letter-spacing:.2px}
-  .controls{display:grid;gap:10px;grid-template-columns:1fr 1.2fr 1fr;align-items:center}
-  .controls label{font-size:12px;color:var(--muted)}
-  .control{display:grid;gap:6px}
-  input[type="search"],input[list],button,input[type="file"]{background:#0b1220;border:1px solid var(--border);color:var(--ink);padding:10px 12px;border-radius:12px;outline:none;font-size:14px}
-  input[type="file"]{padding:8px 10px}
-  button{cursor:pointer;transition:.2s ease}
-  button.primary{background:var(--brand);border-color:transparent;color:#0b1220;font-weight:700}
-  button.ghost{background:transparent;border-color:var(--border)}
-  main{padding:16px 20px 80px}
-  .summary{font-size:13px;color:var(--muted);margin:10px 0 16px}
-
-  .table-wrap{overflow-x:auto;border-radius:16px}
-  table{width:100%;border-collapse:separate;border-spacing:0;background:#0b1220;border:1px solid var(--border);border-radius:16px;min-width:900px;table-layout:fixed}
-   th{
-    position:sticky; top: 0;
-    background:#0d1526;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.2px;
-    border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;z-index:3
-  }
-  tbody td{padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px}
-  tbody tr:hover{background:rgba(96,165,250,0.08)}
-  .right{text-align:right}
-  .pill{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;color:var(--ink);background:#0f1a2f}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
-  .chip{border:1px solid var(--border);padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
-  .hidden{display:none !important}
-  .count{font-variant-numeric:tabular-nums}
-  .footer{position:fixed;bottom:12px;right:12px;display:flex;gap:8px}
-  .vendor-info{margin-top:6px;font-size:13px;color:var(--ink)}
-  .vendor-info .muted{color:var(--muted)}
-  col.col0{width:var(--col0-w)} col.col1{width:var(--col1-w)}
-  th.sticky-col,td.sticky-col{position:sticky;background:#0d1526;z-index:2}
-  th.col-0,td.col-0{left:0;min-width:var(--col0-w)}
-  th.col-1,td.col-1{left:calc(var(--col0-w));min-width:var(--col1-w)}
-  tbody td.sticky-col{background:#0b1220}
-  tbody tr:hover td.sticky-col{background:rgba(96,165,250,0.08)}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>외주용역 박스플롯 · 대분류 드롭다운 / 서비스등급 X축</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;        /* slate-900 */
+      --panel: #111827;     /* gray-900 */
+      --ink: #e5e7eb;       /* gray-200 */
+      --muted: #9ca3af;     /* gray-400 */
+      --brand: #60a5fa;     /* blue-400 */
+      --border: #1f2937;    /* gray-800 */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+    header { padding: 18px 24px; border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg,#0f172a 0%, #0b1222 100%); }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    .wrap { display: grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 18px 24px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    label { display: block; margin: 8px 0 6px; color: var(--muted); font-size: 13px; }
+    select, input[type="file"], button {
+      width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #374151; background: #0b1222; color: var(--ink);
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    #plot { height: 72vh; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.4; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; background:#0b2546; color:#b9dcff; border:1px solid #1f3b66; }
+    /* 파일업로드 깔끔한 표시 */
+    .file-row { display:flex; gap:10px; align-items:center; }
+    .file-name { flex:1; min-height: 40px; display:flex; align-items:center; padding: 0 12px; border:1px solid #374151; border-radius:12px; background:#0b1222; color:#9ca3af; font-size:13px; }
+    .btn { cursor: pointer; }
+  </style>
 </head>
 <body>
-<header id="pageHeader">
-  <h1>구매 이력 조회 · 업체 드롭다운 + 전체 검색</h1>
-  <div class="controls">
-    <div class="control">
-      <label>데이터 파일 (Excel .xlsx) — 기본: <code>data.xlsx</code> (GitHub)</label>
-      <input id="file" type="file" accept=".xlsx,.xls" />
+  <header>
+    <h1>외주용역 박스플롯</h1>
+    <div class="hint">
+      조건(드롭다운): <span class="badge">대분류=P열(분류)</span> · X축: <span class="badge">서비스등급=U열</span> · Y축: 
+      <span class="badge">서비스단가=Z열(고정)</span> · 데이터 행: <span class="badge">477–750행 (비어있으면 자동 무시)</span>
     </div>
+  </header>
 
-    <!-- 구매처: datalist 드롭다운(검색 가능) -->
-    <div class="control">
-      <label>구매처명 (드롭다운/검색 가능)</label>
-      <input id="vendorInput" list="vendorList" placeholder="모든 구매처" />
-      <datalist id="vendorList"></datalist>
-      <div id="vendorInfo" class="vendor-info muted"></div>
-    </div>
+  <div class="wrap">
+    <section class="card">
+      <!-- 데이터 불러오기 섹션: 버튼/업로드 나란히 + 파일명 표시 -->
+      <label>데이터 불러오기</label>
+      <div class="grid-2">
+        <button id="loadDefault" class="btn">기본 파일(data.xlsx) 읽기</button>
+        <label class="btn" style="display:block; text-align:center; line-height:20px; padding:10px 12px;">
+          <input type="file" id="file" accept=".xlsx,.xls" style="display:none;" />
+          엑셀 파일 업로드
+        </label>
+      </div>
+      <div class="file-row" style="margin-top:10px;">
+        <div class="file-name" id="fileName">선택된 파일이 없습니다.</div>
+      </div>
 
-    <div class="control">
-      <label>전체 데이터 검색 (부분 일치)</label>
-      <input id="globalSearch" type="search" placeholder="프로젝트명, 분류, 비고 등 키워드" />
-    </div>
+      <label style="margin-top:14px;">대분류(분류 · P열) 선택</label>
+      <select id="category"></select>
+
+      <label style="margin-top:14px;">옵션</label>
+      <div class="row">
+        <div>
+          <select id="orientation">
+            <option value="v" selected>수직 박스(서비스등급 = X축)</option>
+            <option value="h">수평 박스(서비스등급 = Y축)</option>
+          </select>
+        </div>
+        <div>
+          <select id="outliers">
+            <option value="suspected" selected>이상치 표시</option>
+            <option value="none">이상치 숨김</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="hint" style="margin-top:10px;">
+        ※ 헤더가 없어도 동작하지만, 헤더가 있으면 숫자 컬럼 자동 탐지가 더 정확합니다.<br/>
+        ※ 범위: 477–750행만 사용합니다(엑셀 기준 1행부터 시작).
+      </div>
+    </section>
+
+    <section class="card">
+      <div id="plot"></div>
+    </section>
   </div>
-  <div class="chips" id="activeFilters" aria-live="polite"></div>
-  <div class="summary"><span class="count" id="countShown">0</span>건 / 총 <span class="count" id="countTotal">0</span>건 · 정렬: <button class="ghost" id="sortBtn" title="PO생성일 정렬 전환">PO생성일 ⬇</button></div>
-</header>
 
-<main>
-  <div class="table-wrap">
-    <table id="table" aria-describedby="countShown countTotal">
-      <colgroup><col class="col0"/><col class="col1"/><col/><col/><col/><col/><col/><col/><col/><col/></colgroup>
-      <thead>
-        <tr>
-          <th class="sticky-col col-0">PO생성일</th>
-          <th class="sticky-col col-1">프로젝트명</th>
-          <th>분류</th>
-          <th class="right">서비스단가</th>
-          <th>서비스단위</th>
-          <th>서비스 등급내역</th>
-          <th class="right">서비스수량</th>
-          <th>비고</th>
-          <th class="hidden">구매처명</th>
-          <th class="hidden">대분류</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-  </div>
-</main>
+  <script>
+    // --- 고정 X축 순서 ---
+    const GRADE_ORDER = ['초급','중급','고급','특급','컨설턴트'];
 
-<div class="footer">
-  <button id="resetBtn" class="ghost">필터 초기화</button>
-  <button id="reloadBtn" class="primary">기본파일 다시 불러오기</button>
-</div>
+    // --- 설정 상수 ---
+    const EXCEL_SHEET_NAME = "외주용역"; // 시트명
+    const ROW_START = 477; // 포함 (엑셀 1-based)
+    const ROW_END   = 750; // 포함 (엑셀 1-based)
+    const COL_P_IDX = 15;  // P열 = 0-based 15 (분류)
+    const COL_U_IDX = 20;  // U열 = 0-based 20 (서비스등급)
+    const COL_Z_IDX = 25;  // Z열 = 0-based 25 (서비스단가, Y축으로 고정)
 
-<script>
-  const DEFAULT_URL = () => `data.xlsx?ts=${Date.now()}`; // GitHub Pages 캐시 무효화
-  const PREFERRED_SHEET_NAMES = ["외주용역","Sheet1","data","DATA"];
-  const HEADER_MAP = {
-    vendor:["구매처명","업체","벤더","Vendor","매입처"],
-    category:["대분류","분류(대)","Category","카테고리"],
-    poDate:["PO생성일","발주생성일","주문일","PO Date","PO일자"],
-    project:["프로젝트명","사업명","프로젝트","Project"],
-    type:["분류","소분류","Type"],
-    unitPrice:["서비스단가","단가","UnitPrice","금액"],
-    unit:["서비스단위","단위","Unit"],
-    grade:["서비스등급내역","서비스 등급 내역","서비스등급 내역","등급","Grade","서비스 등급"],
-    qty:["서비스수량","수량","Qty","수량(EA)"],
-    note:["비고","메모","Remark","Note"]
-  };
+    const els = {
+      file: document.getElementById('file'),
+      fileName: document.getElementById('fileName'),
+      loadDefault: document.getElementById('loadDefault'),
+      category: document.getElementById('category'),
+      orientation: document.getElementById('orientation'),
+      outliers: document.getElementById('outliers'),
+      plot: document.getElementById('plot'),
+    };
 
-  let rawRows=[], viewRows=[], sortAsc=false, vendorSet=new Set();
+    let state = {
+      headers: [],        // 헤더 행(Array) 또는 자동 생성
+      rows: [],           // 2차원 배열 (header:1 기반)
+      categoryValues: [], // P열 고유값
+    };
 
-  const $=(s)=>document.querySelector(s);
-  const headerEl=$("#pageHeader");
-  const tbody=$("#tbody");
-  const vendorInput=$("#vendorInput");
-  const vendorList=$("#vendorList");
-  const vendorInfo=$("#vendorInfo");
-  const globalSearch=$("#globalSearch");
-  const countShown=$("#countShown");
-  const countTotal=$("#countTotal");
-  const sortBtn=$("#sortBtn");
-
-  const fmtKRW=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
-  const fmtQty=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(Number(n));
-  const parseDate=(v)=>{ if(!v&&v!==0) return null; if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return new Date(d.y,d.m-1,d.d);} const s=String(v).trim().replaceAll(".","-").replaceAll("/","-"); const dt=new Date(s); return isNaN(dt)?null:dt; };
-  const fmtDate=(d)=>!d?"":d.toISOString().slice(0,10);
-  const norm=(s)=>(s??"").toString().trim();
-
-  // 부분 일치 검색을 위한 행 전체 텍스트 생성
-  const buildSearchText = (obj) =>
-    [obj.vendor,obj.category,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)]
-      .join(" ").toLowerCase();
-
-  function detectHeaders(headerRow){
-    const h={}; const row=headerRow.map(h=>norm(h).toLowerCase());
-    for(const [key,aliases] of Object.entries(HEADER_MAP)){
-      let i=-1; for(const a of aliases){ const idx=row.indexOf(norm(a).toLowerCase()); if(idx!==-1){i=idx;break;} }
-      h[key]=i;
+    // 유틸: 고유값 추출
+    function unique(arr) {
+      return Array.from(new Set(arr.filter(v => v !== undefined && v !== null && String(v).trim() !== '')));
     }
-    return h;
-  }
 
-  function loadSheet(wb){
-    const name=wb.SheetNames.find(n=>PREFERRED_SHEET_NAMES.includes(n))||wb.SheetNames[0];
-    const sheet=wb.Sheets[name];
-    const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
-    if(!rows.length) throw new Error("시트가 비어 있습니다.");
-    const map=detectHeaders(rows[0]);
+    // 엑셀 파일 로드 (ArrayBuffer)
+    async function loadWorkbookFromArrayBuffer(ab) {
+      const wb = XLSX.read(ab, { type: 'array' });
+      const sheetName = wb.Sheets[EXCEL_SHEET_NAME] ? EXCEL_SHEET_NAME : wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
 
-    rawRows = rows.slice(1).map(r=>{
-      const obj={
-        vendor:norm(r[map.vendor]), category:norm(r[map.category]), poDate:parseDate(r[map.poDate]),
-        project:norm(r[map.project]), type:norm(r[map.type]),
-        unitPrice:r[map.unitPrice]===""?"":Number(String(r[map.unitPrice]).replace(/[^\d.-]/g,"")),
-        unit:norm(r[map.unit]), grade:norm(r[map.grade]),
-        qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
-        note:norm(r[map.note])
-      };
-      obj._search = buildSearchText(obj); // ▼ 부분 일치용 텍스트
-      return obj;
-    }).filter(r=>Object.values(r).some(v=>v!==""));
+      // header:1 => 2차원 배열 [ [c0,c1,...], [..], ... ]
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw: true, defval: null });
+      return rows;
+    }
 
-    sortAsc=false;
-    populateVendorOptions();
-    applyFiltersAndRender();
-    countTotal.textContent=rawRows.length.toLocaleString('ko-KR');
-  }
-
-  function populateVendorOptions(){
-    const vendors=[...new Set(rawRows.map(r=>r.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
-    const prev=norm(vendorInput.value);
-    vendorSet=new Set(vendors);
-    vendorList.innerHTML = vendors.map(v=>`<option value="${escapeHtml(v)}"></option>`).join("");
-    if(prev && vendorSet.has(prev)) vendorInput.value=prev; else vendorInput.value="";
-  }
-
-  function sortRows(){
-    viewRows.sort((a,b)=>{ const ad=a.poDate?.getTime() ?? -Infinity; const bd=b.poDate?.getTime() ?? -Infinity; return sortAsc?ad-bd:bd-ad; });
-  }
-
-  function activeFilterChips(){
-    const chips=[];
-    if(vendorInput.value) chips.push(`<span class="chip">구매처명: ${escapeHtml(vendorInput.value)}</span>`);
-    if(globalSearch.value) chips.push(`<span class="chip">검색(부분 일치): “${escapeHtml(globalSearch.value)}”</span>`);
-    $("#activeFilters").innerHTML=chips.join("");
-  }
-
-  function applyFiltersAndRender(){
-    const vFilter=norm(vendorInput.value);
-    const q = norm(globalSearch.value).toLowerCase().trim();
-    const qTokens = q ? q.split(/\s+/) : [];
-
-    viewRows = rawRows.filter(r=>{
-      const vendorOk = !vFilter || r.vendor===vFilter;
-      let qOk = true;
-      if(qTokens.length){
-        // ▼ “단어의 일부라도 포함되면” 매칭
-        qOk = qTokens.every(t => r._search.includes(t));
-      }
-      return vendorOk && qOk;
+    // 파일 인풋 핸들러 (라벨 클릭으로 열림)
+    document.querySelector('label.btn input[type="file"]').addEventListener('change', async (e) => {
+      const f = e.target.files?.[0];
+      els.fileName.textContent = f ? f.name : '선택된 파일이 없습니다.';
+      if (!f) return;
+      const ab = await f.arrayBuffer();
+      const rows = await loadWorkbookFromArrayBuffer(ab);
+      ingestRows(rows);
     });
 
-    sortRows();
-    renderTable();
-    countShown.textContent=viewRows.length.toLocaleString('ko-KR');
-    activeFilterChips();
-    updateVendorInfo();
-  }
+    // 기본 data.xlsx 읽기
+    els.loadDefault.addEventListener('click', async () => {
+      try {
+        const res = await fetch('data.xlsx');
+        if (!res.ok) throw new Error('data.xlsx를 찾을 수 없습니다. 같은 폴더에 위치시켜 주세요.');
+        const ab = await res.arrayBuffer();
+        const rows = await loadWorkbookFromArrayBuffer(ab);
+        els.fileName.textContent = 'data.xlsx (기본 파일)';
+        ingestRows(rows);
+      } catch (err) {
+        alert(err.message || err);
+      }
+    });
 
-  function renderTable(){
-    const html=viewRows.map(r=>`
-      <tr>
-        <td class="sticky-col col-0">${fmtDate(r.poDate)}</td>
-        <td class="sticky-col col-1">${escapeHtml(r.project)}</td>
-        <td>${escapeHtml(r.type)}</td>
-        <td class="right">${fmtKRW(r.unitPrice)}</td>
-        <td>${escapeHtml(r.unit)}</td>
-        <td>${escapeHtml(r.grade)}</td>
-        <td class="right">${fmtQty(r.qty)}</td>
-        <td>${escapeHtml(r.note)}</td>
-        <td class="hidden">${escapeHtml(r.vendor)}</td>
-        <td class="hidden">${escapeHtml(r.category)}</td>
-      </tr>`).join("");
-    tbody.innerHTML = html || `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
-  }
+    // 행 데이터 주입 및 UI 구성
+    function ingestRows(rows){
+      if (!rows || !rows.length) {
+        alert('시트가 비어있습니다.');
+        return;
+      }
+      // 헤더 추정: 첫 행에 문자열이 더 많으면 헤더로 간주
+      const first = rows[0] || [];
+      const headerLike = first.some(v => typeof v === 'string');
 
-  function updateVendorInfo(){
-    const v=norm(vendorInput.value);
-    if(!v){ vendorInfo.textContent=''; vendorInfo.classList.add('muted'); return; }
-    const rows=rawRows.filter(r=>r.vendor===v);
-    if(!rows.length){ vendorInfo.textContent='일치하는 구매처 데이터가 없습니다.'; vendorInfo.classList.add('muted'); return; }
-    const dates=rows.map(r=>r.poDate).filter(Boolean).map(d=>d.getTime());
-    const minD=dates.length?new Date(Math.min(...dates)):null;
-    const maxD=dates.length?new Date(Math.max(...dates)):null;
-    const sumUnitPrice=rows.reduce((a,r)=>a+(Number.isFinite(r.unitPrice)?r.unitPrice:0),0);
-    vendorInfo.classList.remove('muted');
-    vendorInfo.innerHTML=`<span class="pill">선택한 업체: ${escapeHtml(v)}</span>
-      <span class="pill">건수: ${rows.length.toLocaleString('ko-KR')}건</span>
-      <span class="pill">최초 PO: ${fmtDate(minD)||'-'}</span>
-      <span class="pill">최신 PO: ${fmtDate(maxD)||'-'}</span>
-      <span class="pill">단가 합계: ${fmtKRW(sumUnitPrice)}</span>`;
-  }
+      let headerRow = headerLike ? first : [];
+      let data = headerLike ? rows.slice(1) : rows.slice();
 
-  function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));}
+      // Excel 1-based 행번호 477~750 (포함) => 배열 0-based로 환산
+      const startIdx = ROW_START - 1 - (headerLike ? 1 : 0);
+      const endIdx = ROW_END - 1 - (headerLike ? 1 : 0);
 
-  // 유효성(목록 밖 수기 입력 방지): 목록에 없으면 비움
-  function validateVendor(){
-    const v=norm(vendorInput.value);
-    if(!v) return true;
-    if(vendorSet.has(v)) return true;
-    vendorInput.value="";
-    vendorInfo.classList.remove('muted');
-    vendorInfo.textContent="목록에 없는 값입니다. 드롭다운에서 선택해주세요.";
-    return false;
-  }
+      const slice = data.filter((_, i) => i >= startIdx && i <= endIdx);
 
-  // 이벤트
-  $("#file").addEventListener('change', async (e)=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    const buf=await f.arrayBuffer(); const wb=XLSX.read(buf); loadSheet(wb);
-  });
-  vendorInput.addEventListener('input', ()=>{ applyFiltersAndRender(); });
-  vendorInput.addEventListener('change', ()=>{ if(validateVendor()) applyFiltersAndRender(); });
-  vendorInput.addEventListener('blur',   ()=>{ if(validateVendor()) applyFiltersAndRender(); });
-  globalSearch.addEventListener('input', applyFiltersAndRender);
-  $("#resetBtn").addEventListener('click', ()=>{ vendorInput.value=""; globalSearch.value=""; applyFiltersAndRender(); });
-  $("#reloadBtn").addEventListener('click', ()=>{ loadDefault(); });
-  sortBtn.addEventListener('click', ()=>{ sortAsc=!sortAsc; sortBtn.textContent=`PO생성일 ${sortAsc?'⬆':'⬇'}`; sortRows(); renderTable(); });
+      state.rows = slice;
+      state.headers = headerRow.length ? headerRow : generateFallbackHeaders(rows[0]?.length || guessMaxCols(slice));
 
-  function adjustTheadTop(){ const h=headerEl.getBoundingClientRect().height; document.documentElement.style.setProperty('--thead-top',`${Math.ceil(h)+2}px`); }
-  window.addEventListener('resize', adjustTheadTop);
-  window.addEventListener('load', adjustTheadTop);
+      // P열(분류) 고유값
+      const pVals = slice.map(r => r[COL_P_IDX]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+      state.categoryValues = unique(pVals).sort(naturalCompare);
 
-  async function loadDefault(){
-    try{
-      const res=await fetch(DEFAULT_URL(),{cache:'no-store'});
-      if(!res.ok) throw new Error('기본 파일(data.xlsx)을 찾을 수 없습니다. 상단에서 파일을 선택하세요.');
-      const buf=await res.arrayBuffer(); const wb=XLSX.read(buf); loadSheet(wb);
-    }catch(e){
-      console.warn(e); rawRows=[]; viewRows=[];
-      tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 상단에서 Excel 파일을 선택하세요.</td></tr>`;
-      countShown.textContent='0'; countTotal.textContent='0'; vendorInfo.textContent='';
-    }finally{ adjustTheadTop(); }
-  }
-  loadDefault();
-</script>
+      populateCategorySelect();
+
+      // 이벤트
+      els.orientation.onchange = draw;
+      els.outliers.onchange = draw;
+
+      draw();
+    }
+
+    function guessMaxCols(rows){
+      return Math.max(0, ...rows.map(r => (Array.isArray(r) ? r.length : 0)));
+    }
+
+    function generateFallbackHeaders(n){
+      // A,B,C,... 스타일 헤더
+      const labels = [];
+      for (let i=0;i<n;i++) labels.push(columnLabel(i));
+      return labels;
+    }
+
+    function columnLabel(idx){
+      // 0 -> A, 25 -> Z, 26 -> AA
+      let s = '';
+      let n = idx;
+      while (n >= 0) {
+        s = String.fromCharCode((n % 26) + 65) + s;
+        n = Math.floor(n / 26) - 1;
+      }
+      return s;
+    }
+
+    function naturalCompare(a,b){
+      return String(a).localeCompare(String(b), 'ko', { numeric: true, sensitivity: 'base' });
+    }
+
+    function populateCategorySelect(){
+      els.category.innerHTML = '';
+      // 전체 보기 옵션
+      const optAll = document.createElement('option');
+      optAll.value = '__ALL__';
+      optAll.textContent = `전체 (${state.categoryValues.length}개 분류)`;
+      els.category.appendChild(optAll);
+
+      state.categoryValues.forEach(v => {
+        const o = document.createElement('option');
+        o.value = String(v);
+        o.textContent = String(v);
+        els.category.appendChild(o);
+      });
+
+      els.category.value = '__ALL__';
+      els.category.onchange = draw;
+    }
+
+    function draw(){
+      if (!state.rows.length) {
+        Plotly.purge(els.plot);
+        return;
+      }
+      const catSel = els.category.value;
+      const orient = els.orientation.value; // 'v' or 'h'
+      const showOutliers = els.outliers.value !== 'none';
+
+      // 분류(P열) 필터 + 필수값 체크(U, Z)
+      const filtered = state.rows.filter(r => {
+        const p = r[COL_P_IDX];
+        const u = r[COL_U_IDX];
+        const y = r[COL_Z_IDX];
+        if (p === null || p === undefined || String(p).trim() === '') return false;
+        if (u === null || u === undefined || String(u).trim() === '') return false;
+        if (y === null || y === undefined || y === '' || !isFinite(+y)) return false;
+        return catSel === '__ALL__' || String(p) === catSel;
+      });
+
+      // 서비스등급(U열)별로 그룹화
+      const byGrade = new Map();
+      for (const r of filtered){
+        const grade = String(r[COL_U_IDX]).trim();
+        const val = +r[COL_Z_IDX];
+        if (!byGrade.has(grade)) byGrade.set(grade, []);
+        byGrade.get(grade).push(val);
+      }
+
+      // --- 핵심: X축을 고정하고, 데이터가 없는 등급도 항상 보이게 플레이스홀더 trace 추가 ---
+      const traces = [];
+      const metricName = state.headers[COL_Z_IDX] ?? `열 ${columnLabel(COL_Z_IDX)}`;
+
+      for (const g of GRADE_ORDER) {
+        const arr = (byGrade.get(g) || []).filter(Number.isFinite);
+
+        if (arr.length > 0) {
+          // 실제 데이터 trace
+          const hover = (orient === 'v')
+            ? `${g}<br>%{y:,.0f}원<extra></extra>`
+            : `${g}<br>%{x:,.0f}원<extra></extra>`;
+
+          const t = {
+            type: 'box',
+            name: g,
+            boxpoints: showOutliers ? 'suspectedoutliers' : false,
+            jitter: 0.3,
+            pointpos: 0,
+            hovertemplate: hover
+          };
+          if (orient === 'v') {
+            t.y = arr;
+          } else {
+            t.x = arr;
+            t.orientation = 'h';
+          }
+          traces.push(t);
+        } else {
+          // 플레이스홀더 trace (축에 카테고리만 고정, 시각 요소는 투명)
+          const placeholder = {
+            type: 'box',
+            name: g,
+            boxpoints: false,
+            hoverinfo: 'skip',
+            line: { color: 'rgba(0,0,0,0)', width: 0 },
+            fillcolor: 'rgba(0,0,0,0)',
+            marker: { color: 'rgba(0,0,0,0)' }
+          };
+          // 값 0을 한 점 넣되 완전 투명 → 축 범위에 0이 포함될 수 있으나 보통 단가가 양수라 영향 미미
+          if (orient === 'v') {
+            placeholder.y = [0];
+          } else {
+            placeholder.x = [0];
+            placeholder.orientation = 'h';
+          }
+          traces.push(placeholder);
+        }
+      }
+
+      const titleCat = (catSel === '__ALL__') ? '전체 분류' : `분류: ${catSel}`;
+
+      // 숫자 축 포맷(천단위 콤마 + 원)
+      const numericAxisCommon = {
+        tickformat: ',',
+        ticksuffix: '원',
+        gridcolor: '#1f2937',
+        zerolinecolor: '#1f2937',
+        automargin: true,
+        title: { text: metricName, standoff: 16 }
+      };
+      const catAxisCommon = {
+        gridcolor: '#1f2937',
+        zerolinecolor: '#1f2937',
+        automargin: true,
+        categoryorder: 'array',
+        categoryarray: GRADE_ORDER,
+        tickmode: 'array',
+        tickvals: GRADE_ORDER, // 카테고리 라벨 강제 표시
+        ticktext: GRADE_ORDER
+      };
+
+      const layout = {
+        paper_bgcolor: '#0f172a',
+        plot_bgcolor: '#0f172a',
+        font: { color: '#e5e7eb' },
+        margin: { t: 48, r: 24, b: 72, l: 84 },
+        title: `${titleCat} · Y축: ${metricName} (Z열)`,
+        showlegend: false
+      };
+
+      if (orient === 'v') {
+        layout.xaxis = { title: '서비스등급 (U열)', ...catAxisCommon };
+        layout.yaxis = numericAxisCommon;
+      } else {
+        layout.xaxis = numericAxisCommon;
+        layout.yaxis = { title: '서비스등급 (U열)', ...catAxisCommon };
+      }
+
+      if (!traces.length){
+        Plotly.purge(els.plot);
+        els.plot.innerHTML = '<div style="padding:12px;color:#9ca3af;">선택한 조건에서 표시할 데이터가 없습니다.</div>';
+        return;
+      }
+
+      Plotly.react(els.plot, traces, layout, {responsive: true, displaylogo:false});
+    }
+
+    // 페이지 로드 후 즉시 기본 파일 시도 (있으면 자동 로드)
+    (async function tryAutoLoad(){
+      try {
+        const res = await fetch('data.xlsx', { method: 'HEAD' });
+        if (res.ok) {
+          const get = await fetch('data.xlsx');
+          const ab = await get.arrayBuffer();
+          const rows = await loadWorkbookFromArrayBuffer(ab);
+          els.fileName.textContent = 'data.xlsx (자동 로드)';
+          ingestRows(rows);
+        }
+      } catch (e) {
+        // 무시: 기본 파일 없으면 사용자가 업로드하면 됨
+      }
+    })();
+  </script>
 </body>
 </html>
