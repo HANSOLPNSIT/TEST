@@ -44,7 +44,6 @@
   .hidden{display:none;}
   .footer{position:fixed;bottom:12px;right:12px;display:flex;gap:8px;}
   .summary{margin-top:10px;color:var(--muted);font-size:12px;}
-  .hint{font-size:11px;color:var(--muted);}
 </style>
 </head>
 <body>
@@ -56,12 +55,10 @@
       <input id="file" type="file" accept=".xlsx,.xls" />
     </div>
     <div class="control">
-      <label>구매처명 (다중 선택 가능)</label>
-      <!-- 변경: 다중 선택 + ‘모든 구매처’ -->
-      <select id="vendorSelect" multiple size="6" aria-label="구매처 다중 선택">
-        <!-- 옵션은 스크립트에서 구성 -->
+      <label>구매처명 (드롭다운 선택)</label>
+      <select id="vendorSelect">
+        <option value="">모든 구매처</option>
       </select>
-      <div class="hint">Ctrl/Command 또는 Shift로 여러 업체 선택 · ‘모든 구매처’를 선택하면 전체 표시</div>
     </div>
     <div class="control">
       <label>전체 데이터 검색 (부분 일치)</label>
@@ -86,7 +83,9 @@
         <th class="sortable" data-key="grade">서비스 등급내역</th>
         <th class="sortable right" data-key="qty">서비스수량</th>
         <th class="sortable" data-key="note">비고</th>
+        <!-- 요청: 비고 옆에 구매처명 표시 -->
         <th class="sortable" data-key="vendor">구매처명</th>
+        <!-- 내부 필터용(표시는 안 함) -->
         <th class="hidden">대분류</th>
       </tr>
     </thead>
@@ -100,287 +99,272 @@
 </div>
 
 <script>
-const DEFAULT_URL = () => `data.xlsx?ts=${Date.now()}`;
-const PREFERRED_SHEET_NAMES = ["외주용역","데이터뷰","Sheet1","data","DATA"];
-const HEADER_MAP = {
-  vendor:["구매처명","업체","벤더","Vendor","매입처"],
-  category:["대분류","분류(대)","Category","카테고리"],
-  poDate:["PO생성일","발주생성일","주문일","PO Date","PO일자"],
-  projectCode:["프로젝트코드","프로젝트 코드","Project Code","사업코드"],
-  project:["프로젝트명","사업명","프로젝트","Project"],
-  type:["분류","소분류","Type"],
-  unitPrice:["서비스단가","단가","UnitPrice","금액"],
-  unit:["서비스단위","단위","Unit"],
-  grade:["서비스 등급내역","서비스등급내역","서비스 등급 내역","서비스등급 내역","등급내역","등급","Grade","grade","서비스등급","서비스 등급"],
-  qty:["서비스수량","수량","Qty","수량(EA)"],
-  note:["비고","메모","Remark","Note"]
-};
+  // 기본 파일 경로 (GitHub Pages에서 같은 폴더에 data.xlsx가 있다고 가정)
+  const DEFAULT_URL = () => `./data.xlsx?ts=${Date.now()}`;
 
-const VENDOR_ALL_VALUE = "__ALL__";
+  // 시트 우선 순위: '데이터뷰' 포함
+  const PREFERRED_SHEET_NAMES = ["외주용역","데이터뷰","Sheet1","data","DATA"];
 
-let rawRows=[],viewRows=[];
-let sortKey='poDate',sortAsc=false;
+  // 열 헤더 매핑(여러 별칭 지원)
+  const HEADER_MAP = {
+    vendor:      ["구매처명","업체","벤더","Vendor","매입처"],
+    category:    ["대분류","분류(대)","Category","카테고리"],
+    poDate:      ["PO생성일","발주생성일","주문일","PO Date","PO일자"],
+    projectCode: ["프로젝트코드","프로젝트 코드","Project Code","사업코드"],
+    project:     ["프로젝트명","사업명","프로젝트","Project"],
+    type:        ["분류","소분류","Type"],
+    unitPrice:   ["서비스단가","단가","UnitPrice","금액"],
+    unit:        ["서비스단위","단위","Unit"],
+    grade:       ["서비스 등급내역","서비스등급내역","서비스 등급 내역","서비스등급 내역","등급내역","등급","Grade","grade","서비스등급","서비스 등급"],
+    qty:         ["서비스수량","수량","Qty","수량(EA)"],
+    note:        ["비고","메모","Remark","Note"]
+  };
 
-const $=(s)=>document.querySelector(s);
-const tbody=$("#tbody");
-const vendorSelect=$("#vendorSelect");
-const globalSearch=$("#globalSearch");
-const countShown=$("#countShown");
-const countTotal=$("#countTotal");
+  let rawRows=[], viewRows=[];
+  let sortKey='poDate', sortAsc=false;
 
-const fmtKRW=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
-const fmtQty=(n)=>(n===null||n===undefined||n==="")?"":new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(Number(n));
-const parseDate=(v)=>{
-  if(!v&&v!==0)return null;
-  if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return new Date(d.y,d.m-1,d.d);}
-  const s=String(v).trim().replaceAll(".","-").replaceAll("/","-");
-  const dt=new Date(s);
-  return isNaN(dt)?null:dt;
-};
-const fmtDate=(d)=>!d?"":d.toISOString().slice(0,10);
-const norm=(s)=>(s??"").toString().trim();
+  const $ = (s)=>document.querySelector(s);
+  const tbody        = $("#tbody");
+  const vendorSelect = $("#vendorSelect");
+  const globalSearch = $("#globalSearch");
+  const countShown   = $("#countShown");
+  const countTotal   = $("#countTotal");
 
-function detectHeaders(headerRow){
-  const normalizeForMatch=(s)=>String(s??"").toLowerCase()
-    .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000]/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
-  const h={};
-  const row=headerRow.map(h=>normalizeForMatch(h));
-  for(const [key,aliases] of Object.entries(HEADER_MAP)){
-    let idx=-1;
-    for(const a of aliases){
-      const i=row.indexOf(normalizeForMatch(a));
-      if(i!==-1){idx=i;break;}
+  const fmtKRW = (n)=>(n===null||n===undefined||n==="") ? "" :
+    new Intl.NumberFormat('ko-KR',{maximumFractionDigits:0}).format(Number(n))+"원";
+  const fmtQty = (n)=>(n===null||n===undefined||n==="") ? "" :
+    new Intl.NumberFormat('ko-KR',{maximumFractionDigits:2}).format(Number(n));
+
+  const parseDate = (v)=>{
+    if(!v && v!==0) return null;
+    if(typeof v==='number'){
+      const d = XLSX.SSF.parse_date_code(v);
+      return new Date(d.y, d.m-1, d.d);
     }
-    if(idx===-1){
-      const noSpaceRow=row.map(x=>x.replace(/\s+/g,''));
+    const s = String(v).trim().replaceAll(".","-").replaceAll("/","-");
+    const dt = new Date(s);
+    return isNaN(dt) ? null : dt;
+  };
+  const fmtDate = (d)=>!d ? "" : d.toISOString().slice(0,10);
+  const norm = (s)=>(s??"").toString().trim();
+
+  function detectHeaders(headerRow){
+    const normalizeForMatch = (s)=>String(s??"").toLowerCase()
+      .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+    const h={};
+    const row = headerRow.map(h=>normalizeForMatch(h));
+    for(const [key,aliases] of Object.entries(HEADER_MAP)){
+      let idx=-1;
       for(const a of aliases){
-        const i=noSpaceRow.indexOf(normalizeForMatch(a).replace(/\s+/g,''));
+        const i=row.indexOf(normalizeForMatch(a));
         if(i!==-1){idx=i;break;}
       }
+      if(idx===-1){
+        const noSpaceRow=row.map(x=>x.replace(/\s+/g,''));
+        for(const a of aliases){
+          const i=noSpaceRow.indexOf(normalizeForMatch(a).replace(/\s+/g,''));
+          if(i!==-1){idx=i;break;}
+        }
+      }
+      h[key]=idx;
     }
-    h[key]=idx;
+    return h;
   }
-  return h;
-}
 
-function loadSheet(wb){
-  const name=wb.SheetNames.find(n=>PREFERRED_SHEET_NAMES.includes(n))||wb.SheetNames[0];
-  const sheet=wb.Sheets[name];
-  const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
-  if(!rows.length) return;
+  function loadSheet(wb){
+    const name = wb.SheetNames.find(n=>PREFERRED_SHEET_NAMES.includes(n)) || wb.SheetNames[0];
+    const sheet = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+    if(!rows.length) return;
 
-  const map=detectHeaders(rows[0]);
+    const map = detectHeaders(rows[0]);
 
-  rawRows=rows.slice(1).map((r,idx)=>{
-    const obj={
-      _idx: idx,
-      vendor:norm(r[map.vendor]),
-      category:norm(r[map.category]),
-      poDate:parseDate(r[map.poDate]),
-      projectCode:map.projectCode!==-1?norm(r[map.projectCode]):"",
-      project:norm(r[map.project]),
-      type:norm(r[map.type]),
-      unitPrice:r[map.unitPrice]===""?"":Number(String(r[map.unitPrice]).replace(/[^\d.-]/g,"")),
-      unit:norm(r[map.unit]),
-      grade:map.grade!==-1?norm(r[map.grade]):"",
-      qty:r[map.qty]===""?"":Number(String(r[map.qty]).replace(/[^\d.-]/g,"")),
-      note:norm(r[map.note])
-    };
-    obj._search=[obj.vendor,obj.category,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,obj.unitPrice,obj.qty,fmtDate(obj.poDate)].join(" ").toLowerCase();
-    return obj;
-  }).filter(r=>Object.values(r).some(v=>v!==""));
+    rawRows = rows.slice(1).map((r,idx)=>{
+      const obj = {
+        _idx: idx, // 안정적 정렬 보조키
+        vendor:     map.vendor!==-1      ? norm(r[map.vendor])      : "",
+        category:   map.category!==-1    ? norm(r[map.category])    : "",
+        poDate:     map.poDate!==-1      ? parseDate(r[map.poDate]) : null,
+        projectCode:map.projectCode!==-1 ? norm(r[map.projectCode]) : "",
+        project:    map.project!==-1     ? norm(r[map.project])     : "",
+        type:       map.type!==-1        ? norm(r[map.type])        : "",
+        unitPrice:  map.unitPrice!==-1 && r[map.unitPrice]!=="" ? Number(String(r[map.unitPrice]).replace(/[^\d.-]/g,"")) : "",
+        unit:       map.unit!==-1        ? norm(r[map.unit])        : "",
+        grade:      map.grade!==-1       ? norm(r[map.grade])       : "",
+        qty:        map.qty!==-1   && r[map.qty]!=="" ? Number(String(r[map.qty]).replace(/[^\d.-]/g,"")) : "",
+        note:       map.note!==-1        ? norm(r[map.note])        : ""
+      };
+      obj._search = [
+        obj.vendor,obj.category,obj.projectCode,obj.project,obj.type,obj.unit,obj.grade,obj.note,
+        obj.unitPrice,obj.qty, fmtDate(obj.poDate)
+      ].join(" ").toLowerCase();
+      return obj;
+    }).filter(r=>Object.values(r).some(v=>v!==""));
 
-  populateVendorOptions();
-  applyFiltersAndRender();
-  countTotal.textContent=rawRows.length.toLocaleString('ko-KR');
-}
+    populateVendorOptions();
+    applyFiltersAndRender();
+    countTotal.textContent = rawRows.length.toLocaleString('ko-KR');
+  }
 
-/* === 구매처 옵션 구성 (다중 선택 + ‘모든 구매처’) === */
-function populateVendorOptions(){
-  const prevSelected = getSelectedVendors(); // 기존 선택 보존
-  const vendors=[...new Set(rawRows.map(r=>r.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+  function populateVendorOptions(){
+    const vendors = [...new Set(rawRows.map(r=>r.vendor).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'ko'));
+    vendorSelect.innerHTML =
+      `<option value="">모든 구매처</option>` +
+      vendors.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  }
 
-  // 옵션 렌더
-  vendorSelect.innerHTML =
-    `<option value="${VENDOR_ALL_VALUE}">모든 구매처</option>` +
-    vendors.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  /* === 정렬: 오름/내림 모두 정확, 빈값은 항상 뒤로 === */
+  function compareValues(aVal,bVal,kind){
+    const aEmpty = (aVal===null || aVal===undefined || aVal==="");
+    const bEmpty = (bVal===null || bVal===undefined || bVal==="");
+    if(aEmpty && bEmpty) return 0;
+    if(aEmpty) return 1;
+    if(bEmpty) return -1;
 
-  // 선택 복원: 이전에 아무 것도 없었거나 전체가 포함되어 있었다면 ‘모든 구매처’ 선택
-  if (!prevSelected.length || prevSelected.includes(VENDOR_ALL_VALUE)) {
-    selectAllVendors();
-  } else {
-    // 기존에 고른 벤더만 선택
-    Array.from(vendorSelect.options).forEach(opt=>{
-      opt.selected = prevSelected.includes(opt.value);
+    if(kind==='date'){
+      const av = aVal instanceof Date ? aVal.getTime() : NaN;
+      const bv = bVal instanceof Date ? bVal.getTime() : NaN;
+      return av - bv;
+    }
+    if(kind==='number'){
+      const av = Number(aVal);
+      const bv = Number(bVal);
+      return av - bv;
+    }
+    const av = String(aVal);
+    const bv = String(bVal);
+    return av.localeCompare(bv,'ko',{numeric:true,sensitivity:'base'});
+  }
+
+  function sortRows(){
+    const key = sortKey;
+    const kind = key==='poDate' ? 'date' : (key==='unitPrice' || key==='qty') ? 'number' : 'string';
+    viewRows.sort((a,b)=>{
+      const base = compareValues(a[key], b[key], kind);
+      const dir = sortAsc ? 1 : -1;
+      if(base!==0) return base*dir;
+      return (a._idx - b._idx);
     });
-    // 만약 아무 것도 매칭 안되면 전체로
-    const anySelected = Array.from(vendorSelect.options).some(o=>o.selected);
-    if (!anySelected) selectAllVendors();
   }
-}
 
-/* 현재 선택된 벤더 값 배열 */
-function getSelectedVendors(){
-  return Array.from(vendorSelect.selectedOptions).map(o=>o.value);
-}
+  function applyFiltersAndRender(){
+    const vFilter = norm(vendorSelect.value); // "" = 모든 구매처
+    const q = norm(globalSearch.value).toLowerCase();
+    const qTokens = q ? q.split(/\s+/) : [];
 
-/* ‘모든 구매처’ 단일 선택 */
-function selectAllVendors(){
-  Array.from(vendorSelect.options).forEach(opt=>opt.selected = (opt.value===VENDOR_ALL_VALUE));
-}
+    viewRows = rawRows.filter(r=>{
+      const vendorOk = (vFilter === "" || r.vendor === vFilter); // 빈 값이면 전체
+      let qOk = true;
+      if(qTokens.length){
+        qOk = qTokens.every(t=>r._search.includes(t));
+      }
+      return vendorOk && qOk;
+    });
 
-/* === 정렬 === */
-function compareValues(aVal,bVal,kind){
-  const aEmpty = (aVal===null || aVal===undefined || aVal==="");
-  const bEmpty = (bVal===null || bVal===undefined || bVal==="");
-
-  if(aEmpty && bEmpty) return 0;
-  if(aEmpty) return 1;
-  if(bEmpty) return -1;
-
-  if(kind==='date'){
-    const av = aVal instanceof Date ? aVal.getTime() : NaN;
-    const bv = bVal instanceof Date ? bVal.getTime() : NaN;
-    return av - bv;
-  }
-  if(kind==='number'){
-    const av = Number(aVal);
-    const bv = Number(bVal);
-    return av - bv;
-  }
-  const av = String(aVal);
-  const bv = String(bVal);
-  return av.localeCompare(bv,'ko',{numeric:true,sensitivity:'base'});
-}
-
-function sortRows(){
-  const key = sortKey;
-  const kind =
-    key==='poDate' ? 'date' :
-    (key==='unitPrice' || key==='qty') ? 'number' : 'string';
-
-  viewRows.sort((a,b)=>{
-    const base = compareValues(a[key], b[key], kind);
-    const dir = sortAsc ? 1 : -1;
-    if(base!==0) return base*dir;
-    return (a._idx - b._idx);
-  });
-}
-
-/* === 필터 + 렌더 === */
-function applyFiltersAndRender(){
-  const selected = getSelectedVendors();
-  const allSelected = selected.includes(VENDOR_ALL_VALUE) || selected.length===0; // ‘모든 구매처’ 또는 미선택 시 전체
-  const q=norm(globalSearch.value).toLowerCase();
-  const qTokens=q?q.split(/\s+/):[];
-
-  viewRows=rawRows.filter(r=>{
-    const vendorOk = allSelected ? true : selected.includes(r.vendor);
-    let qOk=true;
-    if(qTokens.length){qOk=qTokens.every(t=>r._search.includes(t));}
-    return vendorOk && qOk;
-  });
-
-  sortRows();
-  renderTable();
-  countShown.textContent=viewRows.length.toLocaleString('ko-KR');
-}
-
-function renderTable(){
-  const html=viewRows.map(r=>`
-  <tr>
-    <td>${fmtDate(r.poDate)}</td>
-    <td>${escapeHtml(r.projectCode)}</td>
-    <td>${escapeHtml(r.project)}</td>
-    <td>${escapeHtml(r.type)}</td>
-    <td class="right">${fmtKRW(r.unitPrice)}</td>
-    <td>${escapeHtml(r.unit)}</td>
-    <td>${escapeHtml(r.grade)}</td>
-    <td class="right">${fmtQty(r.qty)}</td>
-    <td>${escapeHtml(r.note)}</td>
-    <td>${escapeHtml(r.vendor)}</td>
-    <td class="hidden">${escapeHtml(r.category)}</td>
-  </tr>`).join("");
-  tbody.innerHTML=html||`<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">조건에 맞는 데이터가 없습니다.</td></tr>`;
-  updateSortIndicators();
-}
-
-function updateSortIndicators(){
-  document.querySelectorAll('th.sortable').forEach(th=>{
-    th.classList.remove('sort-asc','sort-desc');
-    if(th.dataset.key===sortKey){
-      th.classList.add(sortAsc?'sort-asc':'sort-desc');
-    }
-  });
-}
-
-function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));}
-
-/* 파일 업로드 */
-$("#file").addEventListener('change',async(e)=>{
-  const f=e.target.files?.[0]; if(!f)return;
-  const buf=await f.arrayBuffer(); const wb=XLSX.read(buf); loadSheet(wb);
-});
-
-/* 구매처 다중 선택 동작:
-   - ‘모든 구매처’ 선택되면 나머지 해제 (전체 보기)
-   - 특정 업체 1개 이상 선택하면 ‘모든 구매처’ 해제 (부분 보기) */
-vendorSelect.addEventListener('change',()=>{
-  const selected = getSelectedVendors();
-  const hasAll = selected.includes(VENDOR_ALL_VALUE);
-
-  if (hasAll && selected.length>1) {
-    // ‘모든 구매처’ + 다른 값 동시 선택 → ‘모든 구매처’만 남김
-    selectAllVendors();
-  } else if (!hasAll && selected.length===0) {
-    // 아무 것도 선택 안 된 경우 → 전체로
-    selectAllVendors();
-  }
-  applyFiltersAndRender();
-});
-
-globalSearch.addEventListener('input',applyFiltersAndRender);
-
-document.querySelectorAll('th.sortable').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const key=th.dataset.key;
-    if(sortKey===key){
-      sortAsc=!sortAsc;
-    }else{
-      sortKey=key;
-      sortAsc=false; // 첫 클릭은 내림차순
-    }
     sortRows();
     renderTable();
-  });
-});
-
-$("#resetBtn").addEventListener('click',()=>{
-  selectAllVendors();
-  globalSearch.value="";
-  applyFiltersAndRender();
-});
-
-$("#reloadBtn").addEventListener('click',()=>{loadDefault();});
-
-/* 기본 파일 로드 */
-async function loadDefault(){
-  try{
-    const res=await fetch(DEFAULT_URL(),{cache:'no-store'});
-    if(!res.ok)throw new Error('data.xlsx을 찾을 수 없습니다.');
-    const buf=await res.arrayBuffer();
-    const wb=XLSX.read(buf);
-    loadSheet(wb);
-  }catch(e){
-    console.warn(e);
-    tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.</td></tr>`;
-    // 옵션 초기 상태(전체)
-    vendorSelect.innerHTML = `<option value="${VENDOR_ALL_VALUE}" selected>모든 구매처</option>`;
+    countShown.textContent = viewRows.length.toLocaleString('ko-KR');
   }
-}
-loadDefault();
+
+  function renderTable(){
+    const html = viewRows.map(r=>`
+      <tr>
+        <td>${fmtDate(r.poDate)}</td>
+        <td>${escapeHtml(r.projectCode)}</td>
+        <td>${escapeHtml(r.project)}</td>
+        <td>${escapeHtml(r.type)}</td>
+        <td class="right">${fmtKRW(r.unitPrice)}</td>
+        <td>${escapeHtml(r.unit)}</td>
+        <td>${escapeHtml(r.grade)}</td>
+        <td class="right">${fmtQty(r.qty)}</td>
+        <td>${escapeHtml(r.note)}</td>
+        <td>${escapeHtml(r.vendor)}</td>
+        <td class="hidden">${escapeHtml(r.category)}</td>
+      </tr>
+    `).join("");
+
+    tbody.innerHTML = html || `
+      <tr>
+        <td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">
+          조건에 맞는 데이터가 없습니다.
+        </td>
+      </tr>
+    `;
+    updateSortIndicators();
+  }
+
+  function updateSortIndicators(){
+    document.querySelectorAll('th.sortable').forEach(th=>{
+      th.classList.remove('sort-asc','sort-desc');
+      if(th.dataset.key===sortKey){
+        th.classList.add(sortAsc?'sort-asc':'sort-desc');
+      }
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s??"").replace(/[&<>"]/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
+    }[c] || c));
+  }
+
+  // 이벤트
+  $("#file").addEventListener('change', async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf);
+    loadSheet(wb);
+  });
+
+  vendorSelect.addEventListener('change', applyFiltersAndRender);
+  globalSearch.addEventListener('input', applyFiltersAndRender);
+
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    th.addEventListener('click',()=>{
+      const key = th.dataset.key;
+      if(sortKey===key){
+        sortAsc = !sortAsc;
+      }else{
+        sortKey = key;
+        sortAsc = false; // 첫 클릭은 내림차순(숫자 큰값/최근일자 먼저)
+      }
+      sortRows();
+      renderTable();
+    });
+  });
+
+  $("#resetBtn").addEventListener('click',()=>{
+    vendorSelect.value = ""; // 모든 구매처
+    globalSearch.value = "";
+    applyFiltersAndRender();
+  });
+
+  $("#reloadBtn").addEventListener('click',()=>{ loadDefault(); });
+
+  async function loadDefault(){
+    try{
+      const res = await fetch(DEFAULT_URL(), {cache:'no-store'});
+      if(!res.ok) throw new Error('data.xlsx을 찾을 수 없습니다.');
+      const buf = await res.arrayBuffer();
+      const wb = XLSX.read(buf);
+      loadSheet(wb);
+    }catch(e){
+      console.warn(e);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="12" style="text-align:center;color:var(--muted);padding:22px;">
+            기본 파일을 찾을 수 없습니다. 파일을 직접 업로드해주세요.
+          </td>
+        </tr>`;
+    }
+  }
+
+  // 초기 로드: 같은 폴더의 data.xlsx 자동 로드
+  loadDefault();
 </script>
 </body>
 </html>
